@@ -23,6 +23,53 @@ from .validation import validate_and_build_config
 # identify them during collection.
 STOCHASTIC_TEST_MARKER = "_stochastic_test_config"
 
+# Cache for tuned parameters (loaded once per process).
+_tuned_params_cache: dict[str, dict[str, object]] | None = None
+
+
+def _get_tuned_params() -> dict[str, dict[str, object]]:
+    """Load and cache tuned parameters from .stochastic.toml."""
+    global _tuned_params_cache
+    if _tuned_params_cache is None:
+        from .tune import load_tuned_params
+
+        _tuned_params_cache = load_tuned_params()
+    return _tuned_params_cache
+
+
+def _load_tuned_variance(func: object, properties: dict[str, object]) -> None:
+    """If tuned variance is available for *func*, add it to properties.
+
+    Looks up the function in .stochastic.toml by matching the function's
+    module and qualified name against stored test keys.
+    """
+    tuned = _get_tuned_params()
+    if not tuned:
+        return
+
+    # Build candidate keys to match against stored test keys.
+    module = getattr(func, "__module__", "") or ""
+    qualname = getattr(func, "__qualname__", "") or ""
+    func_name = getattr(func, "__name__", "") or ""
+
+    # The tune mode stores keys like "tests.test_module.test_fn" (derived from nodeid).
+    # Try various key formats to find a match.
+    candidates = {
+        f"{module}.{qualname}",
+        f"{module}.{func_name}",
+        qualname,
+        func_name,
+    }
+
+    for key, params in tuned.items():
+        # Check if any candidate matches the stored key (or is a suffix of it)
+        for candidate in candidates:
+            if key.endswith(candidate) or candidate.endswith(key):
+                variance = params.get("variance")
+                if variance is not None and "variance_tuned" not in properties:
+                    properties["variance_tuned"] = float(variance)  # type: ignore[arg-type]
+                return
+
 
 def stochastic_test(
     *,
@@ -80,15 +127,18 @@ def stochastic_test(
         side=side,
     )
 
-    # Select the best bound and required sample size.
-    bound, n = select_bound(
-        config.declared_properties,
-        config.tol,
-        config.failure_prob,
-        config.side,
-    )
-
     def decorator(func: Any) -> Any:
+        # Enrich declared properties with tuned variance if available.
+        properties = dict(config.declared_properties)
+        _load_tuned_variance(func, properties)
+
+        # Select the best bound and required sample size.
+        bound, n = select_bound(
+            properties,
+            config.tol,
+            config.failure_prob,
+            config.side,
+        )
         @functools.wraps(func)
         def wrapper() -> None:
             rng, actual_seed = make_rng(seed)
