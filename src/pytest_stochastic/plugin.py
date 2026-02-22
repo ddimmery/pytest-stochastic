@@ -12,6 +12,24 @@ import pytest
 from .decorator import STOCHASTIC_TEST_MARKER
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Register ``--stochastic-tune`` CLI options."""
+    group = parser.getgroup("stochastic", "Stochastic testing options")
+    group.addoption(
+        "--stochastic-tune",
+        action="store_true",
+        default=False,
+        help="Run in tuning mode: profile stochastic tests and write "
+        "discovered parameters to .stochastic.toml",
+    )
+    group.addoption(
+        "--stochastic-tune-samples",
+        type=int,
+        default=50_000,
+        help="Number of samples to collect per test during tuning (default: 50000)",
+    )
+
+
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Tag stochastic tests with a ``stochastic`` marker for easy filtering."""
     for item in items:

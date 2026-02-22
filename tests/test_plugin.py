@@ -74,6 +74,13 @@ def test_verbose_reporting_on_failure(pytester: pytest.Pytester):
     result.stdout.fnmatch_lines(["*FAILED*n=*observed=*"])
 
 
+def test_stochastic_tune_option_registered(pytester: pytest.Pytester):
+    """Verify that --stochastic-tune is registered as a CLI option."""
+    result = pytester.runpytest("--help")
+    result.stdout.fnmatch_lines(["*--stochastic-tune*"])
+    result.stdout.fnmatch_lines(["*--stochastic-tune-samples*"])
+
+
 def test_configuration_error_at_import(pytester: pytest.Pytester):
     """Verify that misconfigured decorators fail at collection time."""
     pytester.makepyfile("""
