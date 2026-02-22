@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import warnings
 from typing import Any
 
 import numpy as np
@@ -232,10 +233,16 @@ def distributional_test(
                 stat, pvalue = scipy_stats.chisquare(observed, f_exp=expected_counts)
             else:  # anderson
                 ref_samples = reference.rvs(size=n_samples, random_state=rng)  # type: ignore[union-attr]
-                result = scipy_stats.anderson_ksamp(
-                    [samples, ref_samples],
-                    variant="midrank",
-                )
+                with warnings.catch_warnings():
+                    warnings.filterwarnings(
+                        "ignore",
+                        message="p-value capped",
+                        category=UserWarning,
+                    )
+                    result = scipy_stats.anderson_ksamp(
+                        [samples, ref_samples],
+                        variant="midrank",
+                    )
                 stat = result.statistic
                 pvalue = result.pvalue
 
