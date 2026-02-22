@@ -5,28 +5,38 @@ repo_name: ddimmery/pytest-stochastic
 
 theme:
   name: material
+  font: false  # custom fonts loaded via extra.css
+  icon:
+    logo: material/dice-multiple
+    repo: fontawesome/brands/github
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: amber
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: amber
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
   features:
     - content.code.copy
     - content.code.annotate
+    - navigation.tabs
     - navigation.sections
     - navigation.expand
     - navigation.top
+    - navigation.footer
+    - navigation.instant
+    - navigation.tracking
     - toc.follow
+    - search.suggest
+    - search.highlight
+    - header.autohide
+
+extra_css:
+  - stylesheets/extra.css
 
 markdown_extensions:
   - admonition

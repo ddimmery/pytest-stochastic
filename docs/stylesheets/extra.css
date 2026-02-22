@@ -1,0 +1,155 @@
+/* ==========================================================================
+   pytest-stochastic docs — custom typography & palette
+   Aesthetic: warm, humanist, scholarly
+   Fonts: URW Classico (headings), Palatino stack (body), Monaspace Argon (code)
+   ========================================================================== */
+
+/* --------------- Font imports --------------- */
+
+/* URW Classico — humanist sans-serif (Optima lineage) for headings */
+@import url("https://fontlibrary.org//face/urw-classico");
+
+/* Monaspace Argon — humanist monospace from GitHub Next */
+@font-face {
+  font-family: "Monaspace Argon";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(https://cdn.jsdelivr.net/fontsource/fonts/monaspace-argon@latest/latin-400-normal.woff2) format("woff2"),
+       url(https://cdn.jsdelivr.net/fontsource/fonts/monaspace-argon@latest/latin-400-normal.woff) format("woff");
+}
+@font-face {
+  font-family: "Monaspace Argon";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url(https://cdn.jsdelivr.net/fontsource/fonts/monaspace-argon@latest/latin-700-normal.woff2) format("woff2"),
+       url(https://cdn.jsdelivr.net/fontsource/fonts/monaspace-argon@latest/latin-700-normal.woff) format("woff");
+}
+
+/* --------------- Colour palette --------------- */
+
+/* Light mode — warm teal primary, goldenrod accent */
+/* Selectors use body[] to override Material's built-in palette declarations */
+:root,
+body[data-md-color-scheme="default"] {
+  --md-primary-fg-color:            #2a6b5c;
+  --md-primary-fg-color--light:     #3d8b7a;
+  --md-primary-fg-color--dark:      #1d5349;
+  --md-primary-bg-color:            #fff;
+  --md-primary-bg-color--light:     #ffffffb3;
+
+  --md-accent-fg-color:             #b8860b;
+  --md-accent-fg-color--transparent: #b8860b1a;
+
+  --md-default-fg-color:            #2d2d2d;
+  --md-default-fg-color--light:     #555;
+  --md-default-fg-color--lighter:   #999;
+  --md-default-fg-color--lightest:  #ccc;
+}
+
+/* Dark mode — slightly brighter teal, warm gold */
+body[data-md-color-scheme="slate"] {
+  --md-primary-fg-color:            #3d8b7a;
+  --md-primary-fg-color--light:     #4a9e8e;
+  --md-primary-fg-color--dark:      #2a6b5c;
+
+  --md-accent-fg-color:             #daa520;
+  --md-accent-fg-color--transparent: #daa5201a;
+}
+
+/* --------------- Typography --------------- */
+
+:root {
+  --md-text-font: "Palatino Linotype", Palatino, "Book Antiqua",
+                  "URW Palladio L", Domitian, serif;
+  --md-code-font: "Monaspace Argon", "Fira Code", "SFMono-Regular",
+                  Consolas, "Liberation Mono", monospace;
+}
+
+/* Body text — serif, generous line height for readability */
+.md-typeset {
+  line-height: 1.72;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Headings — URW Classico, lighter weight for elegance */
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-typeset h4,
+.md-typeset h5,
+.md-typeset h6 {
+  font-family: "URWClassicoRegular", Optima, "Segoe UI", Candara, sans-serif;
+  color: var(--md-default-fg-color);
+}
+
+.md-typeset h1 {
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+.md-typeset h2 {
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* Nav / header — match heading font */
+.md-header,
+.md-tabs {
+  font-family: "URWClassicoRegular", Optima, "Segoe UI", Candara, sans-serif;
+}
+
+/* Nav items — slightly larger for legibility at the top */
+.md-tabs__link {
+  font-size: 0.78rem;
+}
+
+/* Sidebar nav links — use the body serif for warmth */
+.md-nav__link {
+  font-family: var(--md-text-font);
+}
+
+/* --------------- Code --------------- */
+
+/* Inline code */
+.md-typeset code:not(pre code) {
+  padding: 0.1em 0.4em;
+  border-radius: 3px;
+  font-size: 0.84em;
+}
+
+/* Code blocks — tighter line-height than prose */
+.md-typeset pre {
+  border-radius: 6px;
+}
+
+.md-typeset pre code {
+  font-size: 0.82em;
+  line-height: 1.55;
+}
+
+/* --------------- Links --------------- */
+
+.md-typeset a {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+
+.md-typeset a:hover {
+  text-decoration-thickness: 2px;
+}
+
+/* --------------- Admonitions — softer corners --------------- */
+
+.md-typeset .admonition,
+.md-typeset details {
+  border-radius: 6px;
+}
+
+/* --------------- Footer --------------- */
+
+.md-footer {
+  font-family: "URWClassicoRegular", Optima, "Segoe UI", Candara, sans-serif;
+}
