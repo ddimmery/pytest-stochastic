@@ -93,6 +93,10 @@ def stochastic_test(
             if not result.passed:
                 raise AssertionError(result.message)
 
+        # Remove __wrapped__ so pytest doesn't introspect the original
+        # function's signature and try to inject fixtures for its parameters.
+        del wrapper.__wrapped__
+
         # Attach metadata for introspection / plugin use.
         setattr(wrapper, STOCHASTIC_TEST_MARKER, config)
         wrapper._stochastic_bound = bound  # type: ignore[attr-defined]
