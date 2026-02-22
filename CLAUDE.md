@@ -22,4 +22,13 @@ uv run ruff check .        # lint
 uv run ruff format .       # format
 uv run ty check            # type check
 bd ready                   # next tasks
+uv run mkdocs serve        # serve docs locally (http://127.0.0.1:8000)
+uv run mkdocs build        # build static docs site to site/
 ```
+
+## Documentation
+
+Docs live in `docs/` and are built with [MkDocs Material](https://squidfunk.github.io/mkdocs-material/).
+Install docs dependencies with `uv sync --group docs`. The navigation structure is
+defined in `mkdocs.yml`. API reference pages use
+[mkdocstrings](https://mkdocstrings.github.io/) to auto-generate from docstrings.
