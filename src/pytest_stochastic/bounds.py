@@ -35,12 +35,6 @@ def _supports_one_sided_only(side: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _chebyshev_n(tol: float, failure_prob: float, **props: object) -> int:
-    """n = ceil(sigma^2 / (delta * epsilon^2))."""
-    variance = float(props["variance"])  # type: ignore[arg-type]
-    return math.ceil(variance / (failure_prob * tol**2))
-
-
 def _median_of_means_n(tol: float, failure_prob: float, **props: object) -> int:
     """k = ceil(8 ln(2/delta)), n = k * ceil(2 sigma^2 / epsilon^2)."""
     variance = float(props["variance"])  # type: ignore[arg-type]
@@ -166,15 +160,6 @@ def _sub_gaussian_n(tol: float, failure_prob: float, **props: object) -> int:
 # ---------------------------------------------------------------------------
 
 BOUND_REGISTRY: list[BoundStrategy] = [
-    BoundStrategy(
-        name="chebyshev",
-        required_properties=frozenset({"variance"}),
-        optional_properties=frozenset(),
-        compute_n=_chebyshev_n,
-        supports_side=_supports_any_side,
-        estimator_type=EstimatorType.SAMPLE_MEAN,
-        description="Chebyshev's inequality; requires only finite variance",
-    ),
     BoundStrategy(
         name="median_of_means",
         required_properties=frozenset({"variance"}),

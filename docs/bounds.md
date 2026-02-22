@@ -13,16 +13,6 @@ For a given test, the framework:
 
 ## Available Bounds
 
-### Chebyshev
-
-**Required properties:** `variance`
-**Sides:** two-sided, greater, less
-**Estimator:** sample mean
-
-$$n = \left\lceil \frac{\sigma^2}{\delta \cdot \varepsilon^2} \right\rceil$$
-
-The loosest bound in the registry. Applicable to any distribution with finite variance. The $1/\delta$ dependence (vs. $\ln(1/\delta)$ for sub-Gaussian bounds) means it requires significantly more samples for small $\delta$.
-
 ### Median-of-Means
 
 **Required properties:** `variance`
@@ -31,7 +21,7 @@ The loosest bound in the registry. Applicable to any distribution with finite va
 
 $$k = \lceil 8 \ln(2/\delta) \rceil, \quad n = k \cdot \left\lceil \frac{2\sigma^2}{\varepsilon^2} \right\rceil$$
 
-Achieves a sub-Gaussian $\ln(1/\delta)$ rate using only finite variance. Splits samples into $k$ blocks, computes each block's mean, and takes the median. Strictly dominates Chebyshev for $\delta \lesssim 0.15$.
+Achieves a sub-Gaussian $\ln(1/\delta)$ rate using only finite variance. Splits samples into $k$ blocks, computes each block's mean, and takes the median. The sole variance-only bound in the registry.
 
 ### Catoni M-Estimator
 
@@ -125,7 +115,6 @@ The table below shows approximate sample sizes for $\varepsilon = 0.05$, $\delta
 
 | Bound | Required Properties | Approximate $n$ |
 |-------|-------------------|-----------------|
-| Chebyshev | variance | 16,667,000 |
 | Median-of-Means | variance | 29,440 |
 | Hoeffding | bounds | 7,378 |
 | Bernstein | bounds + variance | ~4,000 |

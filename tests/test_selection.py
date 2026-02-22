@@ -46,7 +46,7 @@ class TestSelectBound:
 
     def test_variance_only(self):
         bound, n = select_bound({"variance": 1.0}, 0.1, 1e-6)
-        # Should pick median-of-means over chebyshev for small delta
+        # median-of-means is the sole variance-only bound
         assert bound.name == "median_of_means"
         assert n > 0
 
