@@ -90,6 +90,7 @@ def stochastic_test(
             samples = collect_samples(func, n, rng)
             estimate = compute_estimate(samples, bound.estimator_type, failure_prob)
             result = check_assertion(estimate, config, bound, n, actual_seed)
+            wrapper._stochastic_result = result  # type: ignore[attr-defined]
             if not result.passed:
                 raise AssertionError(result.message)
 
