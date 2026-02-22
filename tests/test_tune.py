@@ -32,7 +32,7 @@ class TestComputeVarianceUCB:
         # Run many times and check UCB >= true_var most of the time
         above = 0
         trials = 100
-        for i in range(trials):
+        for _i in range(trials):
             samples = rng.normal(0, math.sqrt(true_var), 1000)
             ucb = compute_variance_ucb(samples, confidence=0.01)
             if ucb >= true_var:

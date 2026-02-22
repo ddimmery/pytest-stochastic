@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 import tomllib
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -38,10 +38,10 @@ def compute_variance_ucb(
     """Compute a one-sided upper confidence bound on the true variance.
 
     Uses the chi-squared distribution:
-        σ²_upper = (n - 1) · σ̂² / χ²_{δ}(n - 1)
+        var_upper = (n - 1) * var_hat / chi2_quantile(delta, n - 1)
 
-    where χ²_{δ}(n-1) is the δ-quantile of the chi-squared distribution.
-    This ensures P(σ²_true ≤ σ²_upper) ≥ 1 - confidence.
+    where chi2_quantile(delta, n-1) is the delta-quantile of the chi-squared
+    distribution.  This ensures P(var_true <= var_upper) >= 1 - confidence.
     """
     n = len(samples)
     if n < 2:
@@ -71,7 +71,7 @@ def run_tune(
     samples = np.empty(n_tune, dtype=np.float64)
     for i in range(n_tune):
         result = func(rng=rng) if inject_rng else func()  # type: ignore[operator]
-        samples[i] = float(result)  # type: ignore[arg-type]
+        samples[i] = float(result)
 
     return samples, actual_seed
 
@@ -98,7 +98,7 @@ def tune_test(
         variance=variance_ucb,
         observed_range=(observed_min, observed_max),
         n_tune_samples=n_tune,
-        tuned_at=datetime.now(timezone.utc).isoformat(),
+        tuned_at=datetime.now(UTC).isoformat(),
     )
 
 

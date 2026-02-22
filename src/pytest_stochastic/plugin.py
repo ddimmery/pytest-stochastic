@@ -61,7 +61,7 @@ def pytest_runtest_call(item: pytest.Item) -> None:
     else:
         # The wrapper deleted __wrapped__, but the closure contains
         # the original function as a free variable.
-        for cell in (obj.__closure__ or []):
+        for cell in obj.__closure__ or []:
             try:
                 val = cell.cell_contents
                 if callable(val) and val is not obj:
@@ -79,11 +79,13 @@ def pytest_runtest_call(item: pytest.Item) -> None:
     _tune_results.append(result)
 
     # Report the result
-    item.config.pluginmanager.get_plugin("terminalreporter").write_line(
-        f"  TUNED {item.nodeid}: variance_ucb={result.variance:.6g}, "
-        f"range=[{result.observed_range[0]:.6g}, {result.observed_range[1]:.6g}], "
-        f"n={result.n_tune_samples}"
-    )
+    reporter = item.config.pluginmanager.get_plugin("terminalreporter")
+    if reporter is not None:
+        reporter.write_line(
+            f"  TUNED {item.nodeid}: variance_ucb={result.variance:.6g}, "
+            f"range=[{result.observed_range[0]:.6g}, {result.observed_range[1]:.6g}], "
+            f"n={result.n_tune_samples}"
+        )
 
     # Skip the normal test execution by marking this as passed via pytest.skip
     # Actually, we should just let it pass. The wrapper will be called but
@@ -126,7 +128,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(
     item: pytest.Item,
-    call: pytest.CallInfo[None],  # type: ignore[type-arg]
+    call: pytest.CallInfo[None],
 ) -> object:
     """Append stochastic test details to verbose output."""
     outcome = yield
@@ -157,11 +159,8 @@ def pytest_runtest_makereport(
         report.sections.append(("Stochastic Test Details", result.message))
 
     # In verbose mode, modify the status word to include stochastic details.
-    if item.config.option.verbose >= 1:
-        if report.passed:
-            report._stochastic_detail = detail  # type: ignore[attr-defined]
-        elif report.failed:
-            report._stochastic_detail = detail  # type: ignore[attr-defined]
+    if item.config.option.verbose >= 1 and (report.passed or report.failed):
+        report._stochastic_detail = detail
 
 
 def pytest_report_teststatus(

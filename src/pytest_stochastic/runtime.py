@@ -232,7 +232,7 @@ def check_maurer_pontil(
     or ``None`` if no improvement over the full sample count.
 
     The Maurer-Pontil bound states:
-        P(|X̄ - μ| ≥ √(2σ̂²·ln(2/δ)/n) + 7(b-a)·ln(2/δ)/(3(n-1))) ≤ δ
+        P(|mean - mu| >= sqrt(2*var_hat*ln(2/delta)/n) + 7*(b-a)*ln(2/delta)/(3*(n-1))) <= delta
     """
     if config.bounds is None:
         return None
