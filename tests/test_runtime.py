@@ -9,6 +9,7 @@ from pytest_stochastic.runtime import (
     TestResult,
     _wants_rng,
     check_assertion,
+    check_maurer_pontil,
     collect_samples,
     compute_estimate,
     make_rng,
@@ -158,3 +159,34 @@ class TestCheckAssertion:
         assert result.n == 100
         assert result.bound_name == "test_bound"
         assert result.seed == 42
+
+
+class TestMaurerPontil:
+    def test_low_variance_finds_effective_n(self):
+        """With low-variance data, Maurer-Pontil should find an effective n < total n."""
+        # Samples with very low variance and generous tolerance
+        rng = np.random.default_rng(42)
+        n = 5000
+        samples = rng.normal(0.5, 0.01, n)
+        config = TestConfig(expected=0.5, tol=0.05, failure_prob=1e-6, side="two-sided", bounds=(0.0, 1.0))
+        effective_n = check_maurer_pontil(samples, config, failure_prob=1e-6)
+        assert effective_n is not None
+        assert effective_n < n
+
+    def test_high_variance_no_improvement(self):
+        """With high variance close to (b-a)^2/4, no improvement expected."""
+        rng = np.random.default_rng(42)
+        n = 100
+        # Samples spanning the full range — variance near worst case
+        samples = rng.choice([0.0, 1.0], size=n)
+        config = TestConfig(expected=0.5, tol=0.05, failure_prob=1e-6, side="two-sided", bounds=(0.0, 1.0))
+        effective_n = check_maurer_pontil(samples, config, failure_prob=1e-6)
+        # With max variance and tight tolerance, no improvement from Maurer-Pontil
+        assert effective_n is None
+
+    def test_no_bounds_returns_none(self):
+        """Without bounds declared, Maurer-Pontil is not applicable."""
+        samples = np.ones(100)
+        config = TestConfig(expected=1.0, tol=0.1, failure_prob=1e-6, side="two-sided", variance=0.01)
+        effective_n = check_maurer_pontil(samples, config, failure_prob=1e-6)
+        assert effective_n is None

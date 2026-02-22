@@ -10,6 +10,7 @@ from scipy import stats as scipy_stats
 
 from .runtime import (
     check_assertion,
+    check_maurer_pontil,
     collect_samples,
     compute_estimate,
     make_rng,
@@ -94,6 +95,15 @@ def stochastic_test(
             samples = collect_samples(func, n, rng)
             estimate = compute_estimate(samples, bound.estimator_type, failure_prob)
             result = check_assertion(estimate, config, bound, n, actual_seed)
+
+            # Maurer-Pontil opportunistic upgrade: when using Hoeffding
+            # (bounds declared, no variance), check if the empirical
+            # Maurer-Pontil bound holds with fewer samples.
+            if bound.name == "hoeffding" and config.bounds is not None:
+                mp_n = check_maurer_pontil(samples, config, failure_prob)
+                if mp_n is not None:
+                    result.maurer_pontil_effective_n = mp_n
+
             wrapper._stochastic_result = result  # type: ignore[attr-defined]
             if not result.passed:
                 raise AssertionError(result.message)

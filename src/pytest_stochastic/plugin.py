@@ -60,7 +60,9 @@ def pytest_runtest_makereport(
         return
 
     # Build a concise summary: [bound_name, n=..., observed=...]
-    detail = f" [{result.bound_name}, n={result.n}, observed={result.estimate:.6g}]"
+    mp_n = getattr(result, "maurer_pontil_effective_n", None)
+    mp_suffix = f", maurer_pontil_effective_n={mp_n}" if mp_n is not None else ""
+    detail = f" [{result.bound_name}, n={result.n}, observed={result.estimate:.6g}{mp_suffix}]"
 
     # Attach the detail to the report sections so it appears in verbose output.
     # Using a "stochastic" section makes it available to terminal writers.
