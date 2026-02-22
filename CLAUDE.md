@@ -12,7 +12,7 @@ parameters to `.stochastic.toml`.
 - **Package manager:** [uv](https://docs.astral.sh/uv/)
 - **Formatting/linting:** [ruff](https://docs.astral.sh/ruff/)
 - **Type checking:** [ty](https://docs.astral.sh/ty/)
-- **Task tracking:** [beads](https://github.com/steveyegge/beads) (`bd`)
+- **Task tracking:** [beads](https://github.com/steveyegge/beads) (`bd`) — install with `curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash`
 
 ## Commands
 
