@@ -142,6 +142,19 @@ def _bernstein_n(tol: float, failure_prob: float, **props: object) -> int:
     return math.ceil(2 * variance * log_term / tol**2 + 2 * (b - a) * log_term / (3 * tol))
 
 
+def _bernstein_tuned_n(tol: float, failure_prob: float, **props: object) -> int:
+    """Bernstein with machine-discovered variance from --stochastic-tune.
+
+    Same formula as Bernstein, but uses variance_tuned (the UCB from tuning)
+    instead of a user-declared variance.
+    """
+    a, b = props["bounds"]  # type: ignore[index]
+    a, b = float(a), float(b)
+    variance = float(props["variance_tuned"])  # type: ignore[arg-type]
+    log_term = math.log(2 / failure_prob)
+    return math.ceil(2 * variance * log_term / tol**2 + 2 * (b - a) * log_term / (3 * tol))
+
+
 def _sub_gaussian_n(tol: float, failure_prob: float, **props: object) -> int:
     """n = ceil(2 sigma^2 ln(2/delta) / epsilon^2)."""
     sigma = float(props["sub_gaussian_param"])  # type: ignore[arg-type]
@@ -224,6 +237,15 @@ BOUND_REGISTRY: list[BoundStrategy] = [
         supports_side=_supports_any_side,
         estimator_type=EstimatorType.SAMPLE_MEAN,
         description="Bernstein's inequality; tight when variance << range^2",
+    ),
+    BoundStrategy(
+        name="bernstein_tuned",
+        required_properties=frozenset({"bounds", "variance_tuned"}),
+        optional_properties=frozenset(),
+        compute_n=_bernstein_tuned_n,
+        supports_side=_supports_any_side,
+        estimator_type=EstimatorType.SAMPLE_MEAN,
+        description="Bernstein with machine-discovered variance from --stochastic-tune",
     ),
     BoundStrategy(
         name="sub_gaussian",

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import inspect
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -165,6 +165,7 @@ class TestResult:
     bound_name: str
     seed: int
     message: str
+    maurer_pontil_effective_n: int | None = field(default=None)
 
 
 def check_assertion(
@@ -211,3 +212,51 @@ def check_assertion(
         seed=seed,
         message=message,
     )
+
+
+# ---------------------------------------------------------------------------
+# Maurer-Pontil opportunistic upgrade
+# ---------------------------------------------------------------------------
+
+
+def check_maurer_pontil(
+    samples: np.ndarray,
+    config: TestConfig,
+    failure_prob: float,
+) -> int | None:
+    """Check the Maurer-Pontil empirical Bernstein bound post-hoc.
+
+    Given the collected samples, find the smallest prefix length m such that
+    the Maurer-Pontil bound holds at the given failure probability and
+    tolerance.  Returns *m* if a tighter effective n is found (m < len(samples)),
+    or ``None`` if no improvement over the full sample count.
+
+    The Maurer-Pontil bound states:
+        P(|mean - mu| >= sqrt(2*var_hat*ln(2/delta)/n) + 7*(b-a)*ln(2/delta)/(3*(n-1))) <= delta
+    """
+    if config.bounds is None:
+        return None
+
+    n = len(samples)
+    a, b = config.bounds
+    rng = b - a
+    tol = config.tol
+    log_term = math.log(2 / failure_prob)
+
+    # Check from smallest possible n upward to find the earliest point
+    # where the bound holds.  We need at least n=2 for sample variance.
+    min_n = 2
+    effective_n = None
+
+    for m in range(min_n, n + 1):
+        sub = samples[:m]
+        sample_var = float(np.var(sub, ddof=1))
+        # Maurer-Pontil threshold
+        threshold = math.sqrt(2 * sample_var * log_term / m) + 7 * rng * log_term / (3 * (m - 1))
+        if threshold <= tol:
+            effective_n = m
+            break
+
+    if effective_n is not None and effective_n < n:
+        return effective_n
+    return None
