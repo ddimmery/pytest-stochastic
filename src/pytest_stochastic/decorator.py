@@ -1,9 +1,12 @@
-"""The ``@stochastic_test`` decorator."""
+"""The ``@stochastic_test`` and ``@distributional_test`` decorators."""
 
 from __future__ import annotations
 
 import functools
 from typing import Any
+
+import numpy as np
+from scipy import stats as scipy_stats
 
 from .runtime import (
     check_assertion,
@@ -12,6 +15,7 @@ from .runtime import (
     make_rng,
 )
 from .selection import select_bound
+from .types import ConfigurationError
 from .validation import validate_and_build_config
 
 # Marker attribute set on decorated functions so the pytest plugin can
@@ -102,6 +106,115 @@ def stochastic_test(
         setattr(wrapper, STOCHASTIC_TEST_MARKER, config)
         wrapper._stochastic_bound = bound  # type: ignore[attr-defined]
         wrapper._stochastic_n = n  # type: ignore[attr-defined]
+        return wrapper
+
+    return decorator
+
+
+# Marker attribute for distributional tests.
+DISTRIBUTIONAL_TEST_MARKER = "_distributional_test_config"
+
+_VALID_DIST_TESTS = frozenset({"ks", "chi2", "anderson"})
+
+
+def distributional_test(
+    *,
+    reference: object,
+    test: str = "ks",
+    significance: float = 1e-6,
+    n_samples: int = 10_000,
+    seed: int | None = None,
+) -> Any:
+    """Decorator for testing that outputs match a reference distribution.
+
+    Parameters
+    ----------
+    reference:
+        A scipy continuous distribution (e.g. ``scipy.stats.norm(0, 1)``).
+    test:
+        Statistical test to use: ``"ks"`` (Kolmogorov-Smirnov),
+        ``"chi2"`` (chi-squared goodness-of-fit), or ``"anderson"``.
+    significance:
+        Significance level alpha. The test asserts ``p-value > significance``.
+    n_samples:
+        Number of samples to draw from the test function.
+    seed:
+        Optional fixed RNG seed for reproducibility.
+    """
+    # Validate at decoration time.
+    if test not in _VALID_DIST_TESTS:
+        raise ConfigurationError(
+            f"Unknown distributional test {test!r}. "
+            f"Choose from: {', '.join(sorted(_VALID_DIST_TESTS))}"
+        )
+    if not 0 < significance < 1:
+        raise ConfigurationError(
+            f"significance must be in (0, 1), got {significance}"
+        )
+    if n_samples < 1:
+        raise ConfigurationError(
+            f"n_samples must be positive, got {n_samples}"
+        )
+    if not hasattr(reference, "cdf"):
+        raise ConfigurationError(
+            "reference must be a scipy distribution with a .cdf method"
+        )
+
+    def decorator(func: Any) -> Any:
+        @functools.wraps(func)
+        def wrapper() -> None:
+            rng, actual_seed = make_rng(seed)
+            samples = collect_samples(func, n_samples, rng)
+
+            if test == "ks":
+                stat, pvalue = scipy_stats.kstest(samples, reference.cdf)  # type: ignore[union-attr]
+            elif test == "chi2":
+                # Bin samples using quantiles of the reference distribution.
+                n_bins = max(10, int(np.sqrt(n_samples)))
+                edges = reference.ppf(np.linspace(0, 1, n_bins + 1))  # type: ignore[union-attr]
+                observed, _ = np.histogram(samples, bins=edges)
+                expected_counts = np.full(n_bins, n_samples / n_bins)
+                stat, pvalue = scipy_stats.chisquare(observed, f_exp=expected_counts)
+            else:  # anderson
+                ref_samples = reference.rvs(size=n_samples, random_state=rng)  # type: ignore[union-attr]
+                result = scipy_stats.anderson_ksamp(
+                    [samples, ref_samples],
+                    variant="midrank",
+                )
+                stat = result.statistic
+                pvalue = result.pvalue
+
+            passed = pvalue > significance
+
+            detail = (
+                f"[{test}, n={n_samples}, stat={stat:.6g}, "
+                f"p={pvalue:.6g}, sig={significance:.6g}]"
+            )
+            wrapper._distributional_result = {  # type: ignore[attr-defined]
+                "passed": passed,
+                "test": test,
+                "n_samples": n_samples,
+                "statistic": stat,
+                "pvalue": pvalue,
+                "significance": significance,
+                "seed": actual_seed,
+                "detail": detail,
+            }
+
+            if not passed:
+                raise AssertionError(
+                    f"Distributional test FAILED {detail} "
+                    f"(seed={actual_seed})"
+                )
+
+        # Remove __wrapped__ so pytest doesn't inject fixtures.
+        del wrapper.__wrapped__
+
+        setattr(wrapper, DISTRIBUTIONAL_TEST_MARKER, {
+            "test": test,
+            "significance": significance,
+            "n_samples": n_samples,
+        })
         return wrapper
 
     return decorator
