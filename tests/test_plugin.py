@@ -81,6 +81,42 @@ def test_stochastic_tune_option_registered(pytester: pytest.Pytester):
     result.stdout.fnmatch_lines(["*--stochastic-tune-samples*"])
 
 
+def test_tune_mode_creates_toml(pytester: pytest.Pytester):
+    """Verify that --stochastic-tune creates .stochastic.toml with correct schema."""
+    pytester.makepyfile("""
+        from pytest_stochastic import stochastic_test
+
+        @stochastic_test(expected=0.5, atol=0.05, bounds=(0, 1), failure_prob=1e-6, seed=42)
+        def test_fair_coin(rng):
+            return rng.random()
+    """)
+    result = pytester.runpytest("--stochastic-tune", "--stochastic-tune-samples=500")
+    # The test should be skipped (tuning replaces normal execution)
+    result.assert_outcomes(skipped=1)
+    # .stochastic.toml should exist
+    toml_path = pytester.path / ".stochastic.toml"
+    assert toml_path.exists()
+    content = toml_path.read_text()
+    assert "variance" in content
+    assert "n_tune_samples" in content
+    assert "tuned_at" in content
+    assert "observed_range" in content
+
+
+def test_tune_mode_output_message(pytester: pytest.Pytester):
+    """Verify that tune mode reports the tuned parameters."""
+    pytester.makepyfile("""
+        from pytest_stochastic import stochastic_test
+
+        @stochastic_test(expected=0.5, atol=0.05, bounds=(0, 1), failure_prob=1e-6, seed=42)
+        def test_fair_coin(rng):
+            return rng.random()
+    """)
+    result = pytester.runpytest("--stochastic-tune", "--stochastic-tune-samples=500", "-v")
+    result.stdout.fnmatch_lines(["*TUNED*variance_ucb=*"])
+    result.stdout.fnmatch_lines(["*Tuned parameters written to*"])
+
+
 def test_configuration_error_at_import(pytester: pytest.Pytester):
     """Verify that misconfigured decorators fail at collection time."""
     pytester.makepyfile("""
