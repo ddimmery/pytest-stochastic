@@ -1,0 +1,35 @@
+[project]
+name = "pytest-stochastic"
+version = "0.1.0"
+description = "A pytest plugin for principled stochastic unit testing"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pytest>=7.0",
+    "numpy>=1.24",
+    "scipy>=1.10",
+]
+
+[project.entry-points.pytest11]
+stochastic = "pytest_stochastic.plugin"
+
+[build-system]
+requires = ["uv_build>=0.8.17,<0.9.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.11",
+    "ty>=0.0.1a6",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 99
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
