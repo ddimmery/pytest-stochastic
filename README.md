@@ -6,6 +6,7 @@
 [![License](https://img.shields.io/pypi/l/pytest-stochastic.svg)](https://github.com/ddimmery/pytest-stochastic/blob/main/LICENSE)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![ty](https://img.shields.io/badge/type--checked-ty-blue)](https://github.com/astral-sh/ty)
 [![pytest](https://img.shields.io/badge/pytest-plugin-orange)](https://docs.pytest.org/)
 [![Docs](https://img.shields.io/badge/docs-mkdocs--material-blue)](https://ddimmery.github.io/pytest-stochastic/)
 
