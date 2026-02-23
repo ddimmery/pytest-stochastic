@@ -1,8 +1,13 @@
 # pytest-stochastic
 
+[![CI](https://github.com/ddimmery/pytest-stochastic/actions/workflows/ci.yml/badge.svg)](https://github.com/ddimmery/pytest-stochastic/actions/workflows/ci.yml)
 [![PyPI version](https://img.shields.io/pypi/v/pytest-stochastic.svg)](https://pypi.org/project/pytest-stochastic/)
 [![Python versions](https://img.shields.io/pypi/pyversions/pytest-stochastic.svg)](https://pypi.org/project/pytest-stochastic/)
 [![License](https://img.shields.io/pypi/l/pytest-stochastic.svg)](https://github.com/ddimmery/pytest-stochastic/blob/main/LICENSE)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![pytest](https://img.shields.io/badge/pytest-plugin-orange)](https://docs.pytest.org/)
+[![Docs](https://img.shields.io/badge/docs-mkdocs--material-blue)](https://ddimmery.github.io/pytest-stochastic/)
 
 **Principled stochastic unit testing for pytest.**
 
