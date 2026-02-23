@@ -30,7 +30,6 @@ class TestMedianOfMeans:
         assert n == k * block_size
 
 
-
 class TestHoeffding:
     def test_known_value(self):
         # n = ceil((b-a)^2 * ln(2/delta) / (2 * eps^2))
