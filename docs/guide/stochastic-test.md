@@ -64,7 +64,7 @@ A tuple `(a, b)` such that every sample lies in $[a, b]$. Enables: Hoeffding, An
 
 #### `variance` (float)
 
-An upper bound on $\text{Var}(X_i)$. Enables: Chebyshev, Median-of-Means. Combined with `bounds`, also enables Bernstein.
+An upper bound on $\text{Var}(X_i)$. Enables: Median-of-Means. Combined with `bounds`, also enables Bernstein.
 
 ```python
 @stochastic_test(expected=0.5, atol=0.05, variance=1/12)
@@ -166,7 +166,7 @@ For example, if you declare `bounds=(0, 1)` and `variance=0.08`:
 
 - Hoeffding is applicable (needs `bounds`)
 - Bernstein is applicable (needs `bounds` + `variance`)
-- Chebyshev is applicable (needs `variance`)
+- Median-of-Means is applicable (needs `variance`)
 - Bernstein typically wins because it exploits both pieces of information
 
 ## Verbose Output

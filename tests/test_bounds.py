@@ -11,31 +11,12 @@ from pytest_stochastic.bounds import (
     _anderson_n,
     _bentkus_n,
     _bernstein_n,
-    _chebyshev_n,
     _hoeffding_n,
     _maurer_pontil_n,
     _median_of_means_n,
     _sub_gaussian_n,
     applicable_bounds,
 )
-
-
-class TestChebyshev:
-    def test_known_value(self):
-        # n = ceil(sigma^2 / (delta * epsilon^2))
-        # variance=1, failure_prob=0.01, tol=0.1 => ceil(1/(0.01*0.01)) = 10000
-        n = _chebyshev_n(0.1, 0.01, variance=1.0)
-        assert n == 10000
-
-    def test_monotone_in_tolerance(self):
-        n1 = _chebyshev_n(0.1, 0.01, variance=1.0)
-        n2 = _chebyshev_n(0.05, 0.01, variance=1.0)
-        assert n2 > n1  # tighter tolerance => more samples
-
-    def test_monotone_in_failure_prob(self):
-        n1 = _chebyshev_n(0.1, 0.1, variance=1.0)
-        n2 = _chebyshev_n(0.1, 0.01, variance=1.0)
-        assert n2 > n1  # lower failure prob => more samples
 
 
 class TestMedianOfMeans:
@@ -48,12 +29,6 @@ class TestMedianOfMeans:
         block_size = math.ceil(2 * 1.0 / 0.1**2)
         assert n == k * block_size
 
-    def test_dominates_chebyshev_for_small_delta(self):
-        # For small delta, median-of-means should beat Chebyshev
-        delta = 1e-8
-        n_cheb = _chebyshev_n(0.1, delta, variance=1.0)
-        n_mom = _median_of_means_n(0.1, delta, variance=1.0)
-        assert n_mom < n_cheb
 
 
 class TestHoeffding:
@@ -147,7 +122,6 @@ class TestBoundRegistry:
     def test_applicable_with_variance(self):
         result = applicable_bounds({"variance": 1.0}, "two-sided")
         names = {b.name for b in result}
-        assert "chebyshev" in names
         assert "median_of_means" in names
 
     def test_applicable_with_bounds_and_variance(self):
@@ -224,7 +198,6 @@ class TestEdgeCases:
     @pytest.mark.parametrize(
         "bound_fn,props",
         [
-            (_chebyshev_n, {"variance": 1.0}),
             (_hoeffding_n, {"bounds": (0.0, 1.0)}),
             (_bernstein_n, {"bounds": (0.0, 1.0), "variance": 0.1}),
             (_sub_gaussian_n, {"sub_gaussian_param": 0.5}),
@@ -237,7 +210,6 @@ class TestEdgeCases:
     @pytest.mark.parametrize(
         "bound_fn,props",
         [
-            (_chebyshev_n, {"variance": 1.0}),
             (_hoeffding_n, {"bounds": (0.0, 1.0)}),
             (_bernstein_n, {"bounds": (0.0, 1.0), "variance": 0.1}),
             (_sub_gaussian_n, {"sub_gaussian_param": 0.5}),
@@ -251,7 +223,6 @@ class TestEdgeCases:
     @pytest.mark.parametrize(
         "bound_fn,props",
         [
-            (_chebyshev_n, {"variance": 1.0}),
             (_hoeffding_n, {"bounds": (0.0, 1.0)}),
             (_bernstein_n, {"bounds": (0.0, 1.0), "variance": 0.1}),
             (_sub_gaussian_n, {"sub_gaussian_param": 0.5}),
