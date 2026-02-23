@@ -72,6 +72,7 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - User Guide:
+      - Worked Example: guide/example.md
       - "@stochastic_test": guide/stochastic-test.md
       - "@distributional_test": guide/distributional-test.md
       - RNG & Reproducibility: guide/rng.md
