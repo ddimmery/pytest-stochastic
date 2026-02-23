@@ -1,15 +1,49 @@
 [project]
 name = "pytest-stochastic"
 version = "0.1.0"
-description = "A pytest plugin for principled stochastic unit testing"
+description = "A pytest plugin for principled stochastic unit testing using concentration inequalities"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.11"
+authors = [
+    { name = "Drew Dimmery", email = "drew@dimmery.com" },
+]
+keywords = [
+    "pytest",
+    "testing",
+    "stochastic",
+    "statistical-testing",
+    "concentration-inequalities",
+    "flaky-tests",
+    "property-testing",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: Pytest",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Typing :: Typed",
+]
 dependencies = [
     "pytest>=7.0",
     "numpy>=1.24",
     "scipy>=1.10",
 ]
+
+[project.urls]
+Homepage = "https://github.com/ddimmery/pytest-stochastic"
+Documentation = "https://ddimmery.github.io/pytest-stochastic/"
+Repository = "https://github.com/ddimmery/pytest-stochastic"
+Issues = "https://github.com/ddimmery/pytest-stochastic/issues"
+Changelog = "https://github.com/ddimmery/pytest-stochastic/blob/main/CHANGELOG.md"
 
 [project.entry-points.pytest11]
 stochastic = "pytest_stochastic.plugin"
