@@ -232,7 +232,9 @@ def check_maurer_pontil(
     or ``None`` if no improvement over the full sample count.
 
     The Maurer-Pontil bound states:
-        P(|mean - mu| >= sqrt(2*var_hat*ln(2/delta)/n) + 7*(b-a)*ln(2/delta)/(3*(n-1))) <= delta
+        P(|mean - mu| >= sqrt(2*var_hat*ln(k/delta)/n) + 7*(b-a)*ln(k/delta)/(3*(n-1))) <= delta
+
+    where k = 2 for two-sided tests (union bound) and k = 1 for one-sided.
     """
     if config.bounds is None:
         return None
@@ -241,7 +243,8 @@ def check_maurer_pontil(
     a, b = config.bounds
     rng = b - a
     tol = config.tol
-    log_term = math.log(2 / failure_prob)
+    k_side = 2 if config.side == "two-sided" else 1
+    log_term = math.log(k_side / failure_prob)
 
     # Check from smallest possible n upward to find the earliest point
     # where the bound holds.  We need at least n=2 for sample variance.

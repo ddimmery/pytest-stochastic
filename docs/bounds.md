@@ -19,9 +19,9 @@ For a given test, the framework:
 **Sides:** two-sided, greater, less
 **Estimator:** median-of-means
 
-$$k = \lceil 8 \ln(2/\delta) \rceil, \quad n = k \cdot \left\lceil \frac{2\sigma^2}{\varepsilon^2} \right\rceil$$
+$$k = \lceil 8 \ln(k_s/\delta) \rceil, \quad n = k \cdot \left\lceil \frac{2\sigma^2}{\varepsilon^2} \right\rceil$$
 
-Achieves a sub-Gaussian $\ln(1/\delta)$ rate using only finite variance. Splits samples into $k$ blocks, computes each block's mean, and takes the median. The sole variance-only bound in the registry.
+where $k_s = 2$ for two-sided and $k_s = 1$ for one-sided tests. Achieves a sub-Gaussian $\ln(1/\delta)$ rate using only finite variance. Splits samples into $k$ blocks, computes each block's mean, and takes the median. The sole variance-only bound in the registry.
 
 ### Catoni M-Estimator
 
@@ -29,9 +29,9 @@ Achieves a sub-Gaussian $\ln(1/\delta)$ rate using only finite variance. Splits 
 **Sides:** two-sided, greater, less
 **Estimator:** Catoni M-estimator
 
-$$n = \left\lceil C_p \cdot \left(\frac{M}{\varepsilon^p}\right)^{2/(p+1)} \cdot \left(\ln\frac{2}{\delta}\right)^{p/(p+1)} \right\rceil$$
+$$n = \left\lceil C_p \cdot \left(\frac{M}{\varepsilon^p}\right)^{2/(p+1)} \cdot \left(\ln\frac{k}{\delta}\right)^{p/(p+1)} \right\rceil$$
 
-Handles heavy-tailed distributions where only a $p$-th moment bound is known ($p > 1$). Uses a robust M-estimator with influence function $\psi(x) = \text{sign}(x) \cdot \ln(1 + |x| + x^2/2)$.
+where $k = 2$ for two-sided and $k = 1$ for one-sided tests. Handles heavy-tailed distributions where only a $p$-th moment bound is known ($p > 1$). Uses a robust M-estimator with influence function $\psi(x) = \text{sign}(x) \cdot \ln(1 + |x| + x^2/2)$.
 
 ### Hoeffding
 
@@ -39,7 +39,9 @@ Handles heavy-tailed distributions where only a $p$-th moment bound is known ($p
 **Sides:** two-sided, greater, less
 **Estimator:** sample mean
 
-$$n = \left\lceil \frac{(b-a)^2 \ln(2/\delta)}{2\varepsilon^2} \right\rceil$$
+$$n = \left\lceil \frac{(b-a)^2 \ln(k/\delta)}{2\varepsilon^2} \right\rceil$$
+
+where $k = 2$ for two-sided tests (union bound over both tails) and $k = 1$ for one-sided tests.
 
 The standard bound for bounded random variables $X_i \in [a, b]$. Does not require variance knowledge. Widely applicable but can be conservative when the actual variance is small relative to the range.
 
@@ -63,9 +65,9 @@ An empirical Bernstein bound that adapts to the data. Pre-allocates using Hoeffd
 
 The runtime check uses:
 
-$$P\!\left(|\bar{X} - \mu| \geq \sqrt{\frac{2\hat{\sigma}^2 \ln(2/\delta)}{n}} + \frac{7(b-a)\ln(2/\delta)}{3(n-1)}\right) \leq \delta$$
+$$P\!\left(|\bar{X} - \mu| \geq \sqrt{\frac{2\hat{\sigma}^2 \ln(k/\delta)}{n}} + \frac{7(b-a)\ln(k/\delta)}{3(n-1)}\right) \leq \delta$$
 
-This bound is "free" &mdash; it requires the same samples as Hoeffding but may discover a tighter result post-hoc.
+where $k = 2$ for two-sided and $k = 1$ for one-sided tests. This bound is "free" &mdash; it requires the same samples as Hoeffding but may discover a tighter result post-hoc.
 
 ### Bentkus
 
@@ -87,9 +89,9 @@ where $p^* = \varepsilon/(b-a) + 1/2$.
 **Sides:** two-sided, greater, less
 **Estimator:** sample mean
 
-$$n = \left\lceil \frac{2\sigma^2 \ln(2/\delta)}{\varepsilon^2} + \frac{2(b-a)\ln(2/\delta)}{3\varepsilon} \right\rceil$$
+$$n = \left\lceil \frac{2\sigma^2 \ln(k/\delta)}{\varepsilon^2} + \frac{2(b-a)\ln(k/\delta)}{3\varepsilon} \right\rceil$$
 
-Exploits both bounded range and known variance. When $\sigma^2 \ll (b-a)^2/4$, Bernstein is significantly tighter than Hoeffding.
+where $k = 2$ for two-sided and $k = 1$ for one-sided tests. Exploits both bounded range and known variance. When $\sigma^2 \ll (b-a)^2/4$, Bernstein is significantly tighter than Hoeffding.
 
 ### Bernstein (Tuned)
 
@@ -105,9 +107,9 @@ Same formula as Bernstein, but uses the machine-discovered variance from `--stoc
 **Sides:** two-sided, greater, less
 **Estimator:** sample mean
 
-$$n = \left\lceil \frac{2\sigma^2 \ln(2/\delta)}{\varepsilon^2} \right\rceil$$
+$$n = \left\lceil \frac{2\sigma^2 \ln(k/\delta)}{\varepsilon^2} \right\rceil$$
 
-For distributions satisfying the sub-Gaussian tail condition with parameter $\sigma$. Many common distributions are sub-Gaussian: bounded distributions (with $\sigma = (b-a)/2$), Gaussian ($\sigma$ equals the standard deviation), and any distribution with bounded MGF.
+where $k = 2$ for two-sided and $k = 1$ for one-sided tests. For distributions satisfying the sub-Gaussian tail condition with parameter $\sigma$. Many common distributions are sub-Gaussian: bounded distributions (with $\sigma = (b-a)/2$), Gaussian ($\sigma$ equals the standard deviation), and any distribution with bounded MGF.
 
 ## Comparison
 

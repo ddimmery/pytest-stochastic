@@ -41,7 +41,7 @@ def select_bound(
     best_n = float("inf")
 
     for bound in candidates:
-        n = bound.compute_n(tolerance, failure_prob, **declared_properties)
+        n = bound.compute_n(tolerance, failure_prob, side=side, **declared_properties)
         if n < best_n:
             best_n = n
             best_bound = bound
