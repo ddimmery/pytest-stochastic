@@ -112,13 +112,13 @@ Target false-failure probability $\delta$. The test is guaranteed to falsely fai
 
 #### `side` (str, default: "two-sided")
 
-Controls the test direction:
+Controls which direction of deviation is checked:
 
-- `"two-sided"` &mdash; Tests $|\hat{\mu} - \mu| < \text{tol}$
-- `"greater"` &mdash; Tests $\hat{\mu} > \mu - \text{tol}$
-- `"less"` &mdash; Tests $\hat{\mu} < \mu + \text{tol}$
+- `"two-sided"` &mdash; Tests $|\hat{\mu} - \mu| < \text{tol}$ (estimate is within tolerance of expected)
+- `"greater"` &mdash; Tests $\hat{\mu} > \mu - \text{tol}$ (estimate is not too far below expected)
+- `"less"` &mdash; Tests $\hat{\mu} < \mu + \text{tol}$ (estimate is not too far above expected)
 
-One-sided tests can use Bentkus (bounded distributions) which requires 20-40% fewer samples.
+One-sided tests use `ln(1/\delta)` instead of `ln(2/\delta)` in their sample size formulas (no union bound over both tails needed), and can also use the Bentkus inequality for bounded distributions, which requires 20-40% fewer samples than Hoeffding.
 
 ```python
 @stochastic_test(

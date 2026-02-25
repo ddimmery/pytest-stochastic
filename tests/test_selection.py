@@ -33,11 +33,16 @@ class TestSelectBound:
         _, n_bounds_var = select_bound({"bounds": (0.0, 1.0), "variance": 0.05}, 0.05, 1e-6)
         assert n_bounds_var < n_bounds
 
-    def test_one_sided_may_differ_from_two_sided(self):
+    def test_one_sided_fewer_samples_than_two_sided(self):
         _, n_two = select_bound({"bounds": (0.0, 1.0)}, 0.1, 0.01, side="two-sided")
         _, n_one = select_bound({"bounds": (0.0, 1.0)}, 0.1, 0.01, side="greater")
-        # One-sided should not be worse; bentkus may help
-        assert n_one <= n_two
+        # One-sided uses ln(1/delta) instead of ln(2/delta), plus Bentkus
+        assert n_one < n_two
+
+    def test_one_sided_fewer_samples_sub_gaussian(self):
+        _, n_two = select_bound({"sub_gaussian_param": 0.5}, 0.1, 0.01, side="two-sided")
+        _, n_one = select_bound({"sub_gaussian_param": 0.5}, 0.1, 0.01, side="greater")
+        assert n_one < n_two
 
     def test_sub_gaussian_with_param(self):
         bound, n = select_bound({"sub_gaussian_param": 0.5}, 0.1, 0.01)

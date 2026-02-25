@@ -30,36 +30,49 @@ def _supports_one_sided_only(side: str) -> bool:
     return side in {"greater", "less"}
 
 
+def _log_inv_delta(failure_prob: float, side: str) -> float:
+    """Return ``ln(k / δ)`` where *k* = 2 for two-sided and 1 for one-sided.
+
+    Two-sided tests need a union bound over both tails (factor of 2).
+    One-sided tests spend the full failure budget on a single tail.
+    """
+    k = 2 if side == "two-sided" else 1
+    return math.log(k / failure_prob)
+
+
 # ---------------------------------------------------------------------------
 # Individual bound implementations
 # ---------------------------------------------------------------------------
 
 
 def _median_of_means_n(tol: float, failure_prob: float, **props: object) -> int:
-    """k = ceil(8 ln(2/delta)), n = k * ceil(2 sigma^2 / epsilon^2)."""
+    """k = ceil(8 ln(k_side/delta)), n = k * ceil(2 sigma^2 / epsilon^2)."""
     variance = float(props["variance"])  # type: ignore[arg-type]
-    k = math.ceil(8 * math.log(2 / failure_prob))
+    side = str(props.get("side", "two-sided"))
+    k = math.ceil(8 * _log_inv_delta(failure_prob, side))
     block_size = math.ceil(2 * variance / tol**2)
     return k * block_size
 
 
 def _catoni_n(tol: float, failure_prob: float, **props: object) -> int:
-    """n = ceil(C_p * (M / eps^p)^(2/(p+1)) * ln(2/delta)^(p/(p+1)))."""
+    """n = ceil(C_p * (M / eps^p)^(2/(p+1)) * ln(k_side/delta)^(p/(p+1)))."""
     p, m = props["moment_bound"]  # type: ignore[index]
     p = float(p)
     m = float(m)
+    side = str(props.get("side", "two-sided"))
     # C_p is a constant depending on p; use a standard choice
     c_p = 2.0 * (p / (p - 1)) ** (2 * p / (p + 1))
     return math.ceil(
-        c_p * (m / tol**p) ** (2 / (p + 1)) * math.log(2 / failure_prob) ** (p / (p + 1))
+        c_p * (m / tol**p) ** (2 / (p + 1)) * _log_inv_delta(failure_prob, side) ** (p / (p + 1))
     )
 
 
 def _hoeffding_n(tol: float, failure_prob: float, **props: object) -> int:
-    """n = ceil((b - a)^2 * ln(2/delta) / (2 * epsilon^2))."""
+    """n = ceil((b - a)^2 * ln(k_side/delta) / (2 * epsilon^2))."""
     a, b = props["bounds"]  # type: ignore[index]
     a, b = float(a), float(b)
-    return math.ceil((b - a) ** 2 * math.log(2 / failure_prob) / (2 * tol**2))
+    side = str(props.get("side", "two-sided"))
+    return math.ceil((b - a) ** 2 * _log_inv_delta(failure_prob, side) / (2 * tol**2))
 
 
 def _anderson_n(tol: float, failure_prob: float, **props: object) -> int:
@@ -128,11 +141,12 @@ def _bentkus_n(tol: float, failure_prob: float, **props: object) -> int:
 
 
 def _bernstein_n(tol: float, failure_prob: float, **props: object) -> int:
-    """n = ceil(2 sigma^2 ln(2/delta) / eps^2 + 2(b-a) ln(2/delta) / (3 eps))."""
+    """n = ceil(2 sigma^2 ln(k_side/delta) / eps^2 + 2(b-a) ln(k_side/delta) / (3 eps))."""
     a, b = props["bounds"]  # type: ignore[index]
     a, b = float(a), float(b)
     variance = float(props["variance"])  # type: ignore[arg-type]
-    log_term = math.log(2 / failure_prob)
+    side = str(props.get("side", "two-sided"))
+    log_term = _log_inv_delta(failure_prob, side)
     return math.ceil(2 * variance * log_term / tol**2 + 2 * (b - a) * log_term / (3 * tol))
 
 
@@ -145,14 +159,16 @@ def _bernstein_tuned_n(tol: float, failure_prob: float, **props: object) -> int:
     a, b = props["bounds"]  # type: ignore[index]
     a, b = float(a), float(b)
     variance = float(props["variance_tuned"])  # type: ignore[arg-type]
-    log_term = math.log(2 / failure_prob)
+    side = str(props.get("side", "two-sided"))
+    log_term = _log_inv_delta(failure_prob, side)
     return math.ceil(2 * variance * log_term / tol**2 + 2 * (b - a) * log_term / (3 * tol))
 
 
 def _sub_gaussian_n(tol: float, failure_prob: float, **props: object) -> int:
-    """n = ceil(2 sigma^2 ln(2/delta) / epsilon^2)."""
+    """n = ceil(2 sigma^2 ln(k_side/delta) / epsilon^2)."""
     sigma = float(props["sub_gaussian_param"])  # type: ignore[arg-type]
-    return math.ceil(2 * sigma**2 * math.log(2 / failure_prob) / tol**2)
+    side = str(props.get("side", "two-sided"))
+    return math.ceil(2 * sigma**2 * _log_inv_delta(failure_prob, side) / tol**2)
 
 
 # ---------------------------------------------------------------------------

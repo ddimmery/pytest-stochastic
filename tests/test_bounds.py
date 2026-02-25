@@ -12,6 +12,7 @@ from pytest_stochastic.bounds import (
     _bentkus_n,
     _bernstein_n,
     _hoeffding_n,
+    _log_inv_delta,
     _maurer_pontil_n,
     _median_of_means_n,
     _sub_gaussian_n,
@@ -231,3 +232,49 @@ class TestEdgeCases:
         n1 = bound_fn(0.1, 0.1, **props)
         n2 = bound_fn(0.1, 0.001, **props)
         assert n2 > n1
+
+
+class TestLogInvDelta:
+    """Tests for the _log_inv_delta helper."""
+
+    def test_two_sided_uses_factor_2(self):
+        assert _log_inv_delta(0.01, "two-sided") == math.log(2 / 0.01)
+
+    def test_one_sided_uses_factor_1(self):
+        assert _log_inv_delta(0.01, "greater") == math.log(1 / 0.01)
+        assert _log_inv_delta(0.01, "less") == math.log(1 / 0.01)
+
+    def test_one_sided_less_than_two_sided(self):
+        assert _log_inv_delta(0.01, "greater") < _log_inv_delta(0.01, "two-sided")
+
+
+class TestOneSidedOptimization:
+    """One-sided tests should require fewer samples than two-sided."""
+
+    @pytest.mark.parametrize(
+        "bound_fn,props",
+        [
+            (_hoeffding_n, {"bounds": (0.0, 1.0)}),
+            (_bernstein_n, {"bounds": (0.0, 1.0), "variance": 0.1}),
+            (_sub_gaussian_n, {"sub_gaussian_param": 0.5}),
+            (_median_of_means_n, {"variance": 1.0}),
+        ],
+    )
+    def test_one_sided_fewer_samples(self, bound_fn, props):
+        n_two = bound_fn(0.1, 0.01, side="two-sided", **props)
+        n_greater = bound_fn(0.1, 0.01, side="greater", **props)
+        n_less = bound_fn(0.1, 0.01, side="less", **props)
+        assert n_greater < n_two
+        assert n_less < n_two
+        assert n_greater == n_less
+
+    def test_hoeffding_one_sided_uses_log_1_over_delta(self):
+        """Hoeffding one-sided: n = ceil((b-a)^2 * ln(1/delta) / (2 * eps^2))."""
+        n = _hoeffding_n(0.1, 0.01, bounds=(0.0, 1.0), side="greater")
+        expected = math.ceil(1.0 * math.log(1 / 0.01) / (2 * 0.1**2))
+        assert n == expected
+
+    def test_maurer_pontil_matches_hoeffding_one_sided(self):
+        n_mp = _maurer_pontil_n(0.1, 0.01, bounds=(0.0, 1.0), side="greater")
+        n_hoef = _hoeffding_n(0.1, 0.01, bounds=(0.0, 1.0), side="greater")
+        assert n_mp == n_hoef
