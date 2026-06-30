@@ -12,7 +12,6 @@ parameters to `.stochastic.toml`.
 - **Package manager:** [uv](https://docs.astral.sh/uv/)
 - **Formatting/linting:** [ruff](https://docs.astral.sh/ruff/)
 - **Type checking:** [ty](https://docs.astral.sh/ty/)
-- **Task tracking:** [beads](https://github.com/steveyegge/beads) (`bd`) — install with `curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash`
 
 ## Commands
 
@@ -21,7 +20,6 @@ uv run pytest              # run tests
 uv run ruff check .        # lint
 uv run ruff format .       # format
 uv run ty check            # type check
-bd ready                   # next tasks
 uv run mkdocs serve        # serve docs locally (http://127.0.0.1:8000)
 uv run mkdocs build        # build static docs site to site/
 ```
