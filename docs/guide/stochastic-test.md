@@ -88,7 +88,7 @@ A tuple `(p, M)` with $p > 1$ such that $\mathbb{E}[|X - \mu|^p] \leq M$. Enable
 
 #### `symmetric` (bool)
 
-Set to `True` if the distribution is symmetric about its mean. Requires `bounds`. Enables: Anderson's inequality (factor-of-2 improvement over Hoeffding for two-sided tests).
+Set to `True` if the distribution is symmetric about its mean. Requires `bounds` with `expected` strictly inside them. Enables the reduced-range Hoeffding ("anderson") bound: a symmetric distribution with mean $\mu$ supported in $[a, b]$ actually concentrates within $\mu \pm \min(b-\mu, \mu-a)$, which improves on Hoeffding whenever `expected` is off-center in the bounds (two-sided tests only).
 
 ```python
 @stochastic_test(
@@ -118,7 +118,7 @@ Controls which direction of deviation is checked:
 - `"greater"` &mdash; Tests $\hat{\mu} > \mu - \text{tol}$ (estimate is not too far below expected)
 - `"less"` &mdash; Tests $\hat{\mu} < \mu + \text{tol}$ (estimate is not too far above expected)
 
-One-sided tests use `ln(1/\delta)` instead of `ln(2/\delta)` in their sample size formulas (no union bound over both tails needed), and can also use the Bentkus inequality for bounded distributions, which requires 20-40% fewer samples than Hoeffding.
+One-sided tests use $\ln(1/\delta)$ instead of $\ln(2/\delta)$ in their sample size formulas (no union bound over both tails needed), and can also use the Bentkus inequality for bounded distributions, which typically requires 5-10% fewer samples than one-sided Hoeffding.
 
 ```python
 @stochastic_test(

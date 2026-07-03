@@ -78,7 +78,7 @@ def _ols_slope(rng):
     failure_prob=1e-8,
 )
 def test_slope_bounds_only(rng):
-    """Hoeffding: the most conservative option (n ~ 75900)."""
+    """Hoeffding: the most conservative option (n = 75886)."""
     return _ols_slope(rng)
 
 
@@ -94,7 +94,7 @@ def test_slope_bounds_only(rng):
     failure_prob=1e-8,
 )
 def test_slope_bounds_and_variance(rng):
-    """Bernstein: an 83x reduction from Hoeffding (n ~ 918)."""
+    """Bernstein: a 61x reduction from Hoeffding (n = 1245)."""
     return _ols_slope(rng)
 
 
@@ -109,5 +109,5 @@ def test_slope_bounds_and_variance(rng):
     failure_prob=1e-8,
 )
 def test_slope_sub_gaussian(rng):
-    """Sub-Gaussian: a further 8x reduction (n ~ 113)."""
+    """Sub-Gaussian: a further 11x reduction (n = 113)."""
     return _ols_slope(rng)
