@@ -83,26 +83,40 @@ def collect_samples(
 def compute_estimate(
     samples: np.ndarray,
     estimator_type: EstimatorType,
-    failure_prob: float,
+    config: TestConfig,
 ) -> float:
-    """Compute the point estimate using the appropriate estimator."""
+    """Compute the point estimate using the appropriate estimator.
+
+    The estimators must mirror the pre-allocation formulas in
+    :mod:`pytest_stochastic.bounds` exactly (same block counts, same tuning
+    constants), otherwise the computed sample sizes carry no guarantee.
+    """
     if estimator_type == EstimatorType.SAMPLE_MEAN:
         return float(np.mean(samples))
 
     if estimator_type == EstimatorType.MEDIAN_OF_MEANS:
-        return _median_of_means(samples, failure_prob)
+        return _median_of_means(samples, config.failure_prob, config.side)
 
     if estimator_type == EstimatorType.CATONI_M_ESTIMATOR:
-        return _catoni_estimator(samples)
+        return _catoni_estimator(samples, config)
 
     raise ValueError(f"Unknown estimator type: {estimator_type}")  # pragma: no cover
 
 
-def _median_of_means(samples: np.ndarray, failure_prob: float) -> float:
-    """Median-of-means estimator."""
+def _mom_k(failure_prob: float, side: str) -> int:
+    """Median-of-means block count, mirroring ``bounds._mom_num_blocks``."""
+    k_side = 2 if side == "two-sided" else 1
+    return math.ceil(8 * math.log(k_side / failure_prob))
+
+
+def _median_of_means(
+    samples: np.ndarray,
+    failure_prob: float,
+    side: str = "two-sided",
+) -> float:
+    """Median-of-means estimator with the same block count as pre-allocation."""
     n = len(samples)
-    k = math.ceil(8 * math.log(2 / failure_prob))
-    k = min(k, n)  # can't have more blocks than samples
+    k = min(_mom_k(failure_prob, side), n)  # can't have more blocks than samples
     block_size = n // k
     if block_size == 0:
         return float(np.mean(samples))
@@ -113,25 +127,38 @@ def _median_of_means(samples: np.ndarray, failure_prob: float) -> float:
     return float(np.median(block_means))
 
 
-def _catoni_estimator(samples: np.ndarray) -> float:
-    """Catoni M-estimator (simplified).
+def _catoni_estimator(samples: np.ndarray, config: TestConfig) -> float:
+    """Estimator backing the ``catoni`` bound.
 
-    Uses the influence function psi(x) = sign(x) * log(1 + |x| + x^2/2)
-    and finds mu_hat via bisection.
+    For a declared second central moment (p = 2, M = sigma^2) this is
+    Catoni's M-estimator (Catoni 2012) with the influence function
+    psi(x) = sign(x) * log(1 + |x| + x^2/2) and
+
+        alpha = sqrt(2 ln(k_side/delta) / (n (M + tol^2))),
+
+    matching the sample size computed by ``bounds._catoni_n``.  For
+    1 < p < 2 the pre-allocation is based on median-of-means blocks, so the
+    estimator is median-of-means with the identical block count.
     """
     n = len(samples)
-    alpha = math.sqrt(2 * math.log(2) / n) if n > 0 else 1.0
+    if n == 0:
+        return float("nan")
 
-    def _psi(x: float) -> float:
-        """Catoni's influence function."""
-        if x >= 0:
-            return math.log(1 + x + x * x / 2)
-        return -math.log(1 - x + x * x / 2)
+    if config.moment_bound is None:  # pragma: no cover - catoni requires moment_bound
+        raise ValueError("Catoni estimator requires a declared moment_bound=(p, M)")
+    p, m = float(config.moment_bound[0]), float(config.moment_bound[1])
+    if p < 2.0:
+        return _median_of_means(samples, config.failure_prob, config.side)
+
+    k_side = 2 if config.side == "two-sided" else 1
+    alpha = math.sqrt(2 * math.log(k_side / config.failure_prob) / (n * (m + config.tol**2)))
 
     def _objective(mu: float) -> float:
-        return sum(_psi(alpha * (float(s) - mu)) for s in samples) / n
+        x = alpha * (samples - mu)
+        ax = np.abs(x)
+        return float(np.sum(np.sign(x) * np.log1p(ax + ax * ax / 2)) / n)
 
-    # Bisection
+    # The objective is decreasing in mu with a root in [min, max]; bisect.
     lo, hi = float(np.min(samples)), float(np.max(samples))
     if lo == hi:
         return lo
@@ -231,35 +258,47 @@ def check_maurer_pontil(
     tolerance.  Returns *m* if a tighter effective n is found (m < len(samples)),
     or ``None`` if no improvement over the full sample count.
 
-    The Maurer-Pontil bound states:
-        P(|mean - mu| >= sqrt(2*var_hat*ln(k/delta)/n) + 7*(b-a)*ln(k/delta)/(3*(n-1))) <= delta
+    Maurer & Pontil (2009, "Empirical Bernstein Bounds and Sample Variance
+    Penalization") give the one-sided bound
 
-    where k = 2 for two-sided tests (union bound) and k = 1 for one-sided.
+        P(mu - mean >= sqrt(2 V_n ln(2/delta)/n) + 7 (b-a) ln(2/delta) / (3 (n-1))) <= delta
+
+    — the factor 2 inside the log is intrinsic (a union over the mean and
+    variance deviations), so a two-sided test needs ln(4/delta).  Because we
+    scan every prefix length m, we additionally apply a union bound over the
+    n - 1 prefixes considered, giving log(2 * k_side * (n-1) / delta).
+
+    The returned value is purely informational (it never affects pass/fail):
+    it reports how many samples would have sufficed had the empirical
+    variance been trusted from the start.
     """
     if config.bounds is None:
         return None
 
     n = len(samples)
+    if n < 2:
+        return None
+
     a, b = config.bounds
     rng = b - a
     tol = config.tol
     k_side = 2 if config.side == "two-sided" else 1
-    log_term = math.log(k_side / failure_prob)
+    log_term = math.log(2 * k_side * (n - 1) / failure_prob)
 
-    # Check from smallest possible n upward to find the earliest point
-    # where the bound holds.  We need at least n=2 for sample variance.
-    min_n = 2
-    effective_n = None
+    # Running mean/variance over all prefixes m = 2..n via cumulative sums.
+    csum = np.cumsum(samples)
+    csum2 = np.cumsum(samples * samples)
+    m = np.arange(2, n + 1, dtype=np.float64)
+    mean = csum[1:] / m
+    # Unbiased sample variance; clip tiny negative values from cancellation.
+    var = np.maximum((csum2[1:] - m * mean * mean) / (m - 1), 0.0)
 
-    for m in range(min_n, n + 1):
-        sub = samples[:m]
-        sample_var = float(np.var(sub, ddof=1))
-        # Maurer-Pontil threshold
-        threshold = math.sqrt(2 * sample_var * log_term / m) + 7 * rng * log_term / (3 * (m - 1))
-        if threshold <= tol:
-            effective_n = m
-            break
+    threshold = np.sqrt(2 * var * log_term / m) + 7 * rng * log_term / (3 * (m - 1))
+    holds = threshold <= tol
+    if not holds.any():
+        return None
 
-    if effective_n is not None and effective_n < n:
+    effective_n = int(np.argmax(holds)) + 2
+    if effective_n < n:
         return effective_n
     return None

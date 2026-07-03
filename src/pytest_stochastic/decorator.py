@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import math
 import warnings
 from typing import Any
 
@@ -38,38 +39,73 @@ def _get_tuned_params() -> dict[str, dict[str, object]]:
     return _tuned_params_cache
 
 
-def _load_tuned_variance(func: object, properties: dict[str, object]) -> None:
-    """If tuned variance is available for *func*, add it to properties.
+def _reset_tuned_params_cache() -> None:
+    """Invalidate the tuned-parameter cache (e.g. when the project root changes)."""
+    global _tuned_params_cache
+    _tuned_params_cache = None
 
-    Looks up the function in .stochastic.toml by matching the function's
-    module and qualified name against stored test keys.
+
+def _normalize_test_key(key: str) -> str:
+    """Normalize a stored test key by dropping legacy ``.py`` path segments.
+
+    Older versions derived keys from pytest node ids, producing e.g.
+    ``tests.test_module.py.test_fn``; current keys are
+    ``{module}.{qualname}``.  Stripping the ``py`` segment maps the legacy
+    form onto the current one.
+    """
+    return ".".join(part for part in key.split(".") if part != "py")
+
+
+def _tuned_variance_for(func: object) -> float | None:
+    """Return the tuned variance for *func* from .stochastic.toml, if any.
+
+    Matches the function's ``{module}.{qualname}`` against stored keys
+    (exactly, after normalizing legacy nodeid-derived keys).  As a last
+    resort, a bare function-name match is accepted only when it is unique
+    across all stored keys — anything looser would risk cross-module
+    collisions.  Non-finite variances (e.g. ``inf`` from a degenerate tune
+    run) are ignored so they cannot poison sample-size computation.
     """
     tuned = _get_tuned_params()
     if not tuned:
-        return
+        return None
 
-    # Build candidate keys to match against stored test keys.
     module = getattr(func, "__module__", "") or ""
     qualname = getattr(func, "__qualname__", "") or ""
     func_name = getattr(func, "__name__", "") or ""
+    full_key = f"{module}.{qualname}"
 
-    # The tune mode stores keys like "tests.test_module.test_fn" (derived from nodeid).
-    # Try various key formats to find a match.
-    candidates = {
-        f"{module}.{qualname}",
-        f"{module}.{func_name}",
-        qualname,
-        func_name,
-    }
+    def _variance_of(params: dict[str, object]) -> float | None:
+        variance = params.get("variance")
+        if variance is None:
+            return None
+        value = float(variance)  # type: ignore[arg-type]
+        return value if math.isfinite(value) else None
 
     for key, params in tuned.items():
-        # Check if any candidate matches the stored key (or is a suffix of it)
-        for candidate in candidates:
-            if key.endswith(candidate) or candidate.endswith(key):
-                variance = params.get("variance")
-                if variance is not None and "variance_tuned" not in properties:
-                    properties["variance_tuned"] = float(variance)  # type: ignore[arg-type]
-                return
+        if _normalize_test_key(key) == full_key:
+            return _variance_of(params)
+
+    # Unique bare-name fallback (e.g. keys saved from a different rootdir).
+    if not func_name:
+        return None
+    name_matches = [
+        params
+        for key, params in tuned.items()
+        if _normalize_test_key(key).rsplit(".", 1)[-1] == func_name
+    ]
+    if len(name_matches) == 1:
+        return _variance_of(name_matches[0])
+    return None
+
+
+def _load_tuned_variance(func: object, properties: dict[str, object]) -> None:
+    """If tuned variance is available for *func*, add it to properties."""
+    if "variance_tuned" in properties:
+        return
+    variance = _tuned_variance_for(func)
+    if variance is not None:
+        properties["variance_tuned"] = variance
 
 
 def stochastic_test(
@@ -139,13 +175,14 @@ def stochastic_test(
             config.tol,
             config.failure_prob,
             config.side,
+            expected=config.expected,
         )
 
         @functools.wraps(func)
         def wrapper() -> None:
             rng, actual_seed = make_rng(seed)
             samples = collect_samples(func, n, rng)
-            estimate = compute_estimate(samples, bound.estimator_type, failure_prob)
+            estimate = compute_estimate(samples, bound.estimator_type, config)
             result = check_assertion(estimate, config, bound, n, actual_seed)
 
             # Maurer-Pontil opportunistic upgrade: when using Hoeffding
@@ -168,6 +205,7 @@ def stochastic_test(
         setattr(wrapper, STOCHASTIC_TEST_MARKER, config)
         wrapper._stochastic_bound = bound  # type: ignore[attr-defined]
         wrapper._stochastic_n = n  # type: ignore[attr-defined]
+        wrapper._stochastic_original = func  # type: ignore[attr-defined]
         return wrapper
 
     return decorator
@@ -198,6 +236,8 @@ def distributional_test(
         ``"chi2"`` (chi-squared goodness-of-fit), or ``"anderson"``.
     significance:
         Significance level alpha. The test asserts ``p-value > significance``.
+        For ``test="anderson"`` this must lie in ``[0.001, 0.25)`` because
+        scipy's ``anderson_ksamp`` caps reported p-values to that range.
     n_samples:
         Number of samples to draw from the test function.
     seed:
@@ -211,6 +251,17 @@ def distributional_test(
         )
     if not 0 < significance < 1:
         raise ConfigurationError(f"significance must be in (0, 1), got {significance}")
+    if test == "anderson" and not 0.001 <= significance < 0.25:
+        # scipy.stats.anderson_ksamp reports p-values only within
+        # [0.001, 0.25]: below the floor the test could never fail, and at
+        # or above the cap it would always fail.  (An unfloored p-value
+        # would need scipy's PermutationMethod with >= 1/significance
+        # resamples — impractical here; use test="ks" for exact p-values.)
+        raise ConfigurationError(
+            "test='anderson' requires 0.001 <= significance < 0.25 because "
+            "scipy's anderson_ksamp caps p-values to that range; "
+            f"got {significance}. Use test='ks' for smaller significance levels."
+        )
     if n_samples < 1:
         raise ConfigurationError(f"n_samples must be positive, got {n_samples}")
     if not hasattr(reference, "cdf"):
@@ -233,10 +284,14 @@ def distributional_test(
                 stat, pvalue = scipy_stats.chisquare(observed, f_exp=expected_counts)
             else:  # anderson
                 ref_samples = reference.rvs(size=n_samples, random_state=rng)  # type: ignore[union-attr]
+                # scipy floors/caps anderson_ksamp p-values to [0.001, 0.25]
+                # and warns when it does; the decoration-time significance
+                # check guarantees the clamped value still compares correctly
+                # against `significance`, so the warning is just noise here.
                 with warnings.catch_warnings():
                     warnings.filterwarnings(
                         "ignore",
-                        message="p-value capped",
+                        message="p-value (capped|floored)",
                         category=UserWarning,
                     )
                     result = scipy_stats.anderson_ksamp(

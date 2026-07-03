@@ -19,6 +19,12 @@ from scipy import stats as sp_stats
 
 from .runtime import _wants_rng, make_rng
 
+#: Default confidence for the variance UCB.  The UCB failing is an extra
+#: source of test flakiness on top of each test's ``failure_prob`` (total
+#: failure probability <= failure_prob + confidence), so it defaults to the
+#: same order as the default failure_prob.
+DEFAULT_TUNE_CONFIDENCE = 1e-8
+
 
 @dataclass
 class TuneResult:
@@ -29,31 +35,50 @@ class TuneResult:
     observed_range: tuple[float, float]
     n_tune_samples: int
     tuned_at: str
+    confidence: float = DEFAULT_TUNE_CONFIDENCE
+    method: str = "maurer_pontil"
 
 
 def compute_variance_ucb(
     samples: np.ndarray,
-    confidence: float = 1e-4,
-) -> float:
+    confidence: float = DEFAULT_TUNE_CONFIDENCE,
+    bounds: tuple[float, float] | None = None,
+) -> tuple[float, str]:
     """Compute a one-sided upper confidence bound on the true variance.
 
-    Uses the chi-squared distribution:
-        var_upper = (n - 1) * var_hat / chi2_quantile(delta, n - 1)
+    Returns ``(var_upper, method)`` with
+    ``P(var_true <= var_upper) >= 1 - confidence``.
 
-    where chi2_quantile(delta, n-1) is the delta-quantile of the chi-squared
-    distribution.  This ensures P(var_true <= var_upper) >= 1 - confidence.
+    When *bounds* are declared the UCB is distribution-free, via the
+    self-bounding variance concentration of Maurer & Pontil (2009, Thm 10):
+    with probability at least 1 - confidence,
+
+        sqrt(Var) <= sqrt(V_n) + (b - a) * sqrt(2 ln(1/confidence) / (n - 1)).
+
+    Without bounds we fall back to the chi-squared interval
+    ``var_upper = (n - 1) V_n / chi2_quantile(confidence, n - 1)``, which is
+    exact only for Gaussian data — a documented approximation, tagged
+    ``method="chi2_gaussian_approx"`` in the result.  (In practice the
+    tuned variance is consumed by ``bernstein_tuned``, which requires
+    declared bounds, so the rigorous branch is the one that matters.)
     """
     n = len(samples)
     if n < 2:
-        return float("inf")
+        return float("inf"), "insufficient_samples"
 
     sample_var = float(np.var(samples, ddof=1))
+
+    if bounds is not None:
+        a, b = float(bounds[0]), float(bounds[1])
+        slack = (b - a) * math.sqrt(2 * math.log(1 / confidence) / (n - 1))
+        return (math.sqrt(sample_var) + slack) ** 2, "maurer_pontil"
+
     # Lower quantile of chi-squared: smaller quantile → larger UCB
     chi2_quantile = sp_stats.chi2.ppf(confidence, df=n - 1)
     if chi2_quantile <= 0:
-        return float("inf")
+        return float("inf"), "chi2_gaussian_approx"
 
-    return (n - 1) * sample_var / chi2_quantile
+    return (n - 1) * sample_var / chi2_quantile, "chi2_gaussian_approx"
 
 
 def run_tune(
@@ -80,16 +105,26 @@ def tune_test(
     func: object,
     test_key: str,
     n_tune: int = 50_000,
-    confidence: float = 1e-4,
+    confidence: float = DEFAULT_TUNE_CONFIDENCE,
     seed: int | None = None,
+    bounds: tuple[float, float] | None = None,
 ) -> TuneResult:
     """Run the tuning procedure for a single test function.
 
-    Collects n_tune samples, computes variance UCB, and returns a TuneResult.
+    Collects n_tune samples, computes a variance UCB, and returns a
+    TuneResult.  When the test declares *bounds*, the UCB is distribution-free
+    (Maurer-Pontil); otherwise a chi-squared (Gaussian-approximation) interval
+    is used.
+
+    Note on budgets: a test that later relies on the tuned variance fails
+    spuriously either when its own concentration bound fails (probability
+    <= failure_prob) or when the UCB missed the true variance (probability
+    <= confidence), so its total flakiness is at most
+    ``failure_prob + confidence``.
     """
     samples, _ = run_tune(func, n_tune, seed=seed)
 
-    variance_ucb = compute_variance_ucb(samples, confidence=confidence)
+    variance_ucb, method = compute_variance_ucb(samples, confidence=confidence, bounds=bounds)
     observed_min = float(np.min(samples))
     observed_max = float(np.max(samples))
 
@@ -99,6 +134,8 @@ def tune_test(
         observed_range=(observed_min, observed_max),
         n_tune_samples=n_tune,
         tuned_at=datetime.now(UTC).isoformat(),
+        confidence=confidence,
+        method=method,
     )
 
 
@@ -108,11 +145,21 @@ def tune_test(
 
 _TOML_FILENAME = ".stochastic.toml"
 
+# Project root pinned by the pytest plugin (pytest_configure) so that load
+# and save resolve the same file regardless of the process cwd.
+_project_root: Path | None = None
+
+
+def set_project_root(root: Path | None) -> None:
+    """Pin the directory used to resolve .stochastic.toml (None resets to cwd)."""
+    global _project_root
+    _project_root = root
+
 
 def _toml_path(root: Path | None = None) -> Path:
     """Return the path to .stochastic.toml."""
     if root is None:
-        root = Path.cwd()
+        root = _project_root if _project_root is not None else Path.cwd()
     return root / _TOML_FILENAME
 
 
@@ -157,6 +204,8 @@ def save_tuned_params(
             "observed_range": list(r.observed_range),
             "tuned_at": r.tuned_at,
             "n_tune_samples": r.n_tune_samples,
+            "confidence": r.confidence,
+            "method": r.method,
         }
 
     # Write TOML manually (stdlib tomllib is read-only)

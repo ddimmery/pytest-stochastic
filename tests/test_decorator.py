@@ -213,7 +213,7 @@ class TestDistributionalTestBasic:
         @distributional_test(
             reference=stats.norm(0, 1),
             test="anderson",
-            significance=1e-4,
+            significance=0.01,
             n_samples=500,
             seed=42,
         )
@@ -221,6 +221,20 @@ class TestDistributionalTestBasic:
             return rng.normal(0, 1)
 
         test_fn()
+
+    def test_anderson_fail_wrong_distribution(self):
+        @distributional_test(
+            reference=stats.norm(0, 1),
+            test="anderson",
+            significance=0.001,
+            n_samples=500,
+            seed=42,
+        )
+        def test_fn(rng):
+            return rng.normal(3, 1)  # grossly wrong mean
+
+        with pytest.raises(AssertionError, match="FAILED"):
+            test_fn()
 
 
 class TestDistributionalTestMetadata:
@@ -278,6 +292,96 @@ class TestDistributionalTestValidation:
             )
             def test_fn(rng):
                 return rng.normal(0, 1)
+
+    @pytest.mark.parametrize("significance", [1e-6, 1e-4, 0.25, 0.3])
+    def test_anderson_significance_outside_scipy_range_raises(self, significance):
+        """scipy's anderson_ksamp caps p-values to [0.001, 0.25]; outside
+        that range the test could never fail (or would always fail), so the
+        decorator must reject it loudly."""
+        with pytest.raises(ConfigurationError, match="anderson"):
+
+            @distributional_test(
+                reference=stats.norm(0, 1),
+                test="anderson",
+                significance=significance,
+            )
+            def test_fn(rng):
+                return rng.normal(0, 1)
+
+
+class TestTunedVarianceMatching:
+    """Unit tests for the .stochastic.toml key-matching logic."""
+
+    def _with_tuned(self, monkeypatch, tuned):
+        import pytest_stochastic.decorator as dec
+
+        monkeypatch.setattr(dec, "_tuned_params_cache", tuned)
+
+    def test_exact_module_qualname_match(self, monkeypatch):
+        from pytest_stochastic.decorator import _tuned_variance_for
+
+        def fn():
+            return 0.0
+
+        key = f"{fn.__module__}.{fn.__qualname__}"
+        self._with_tuned(monkeypatch, {key: {"variance": 0.5}})
+        assert _tuned_variance_for(fn) == 0.5
+
+    def test_legacy_nodeid_key_with_py_segment_matches(self, monkeypatch):
+        from pytest_stochastic.decorator import _normalize_test_key
+
+        # Legacy keys were nodeid-derived: "tests.test_mod.py.test_fn"
+        assert _normalize_test_key("tests.test_mod.py.test_fn") == "tests.test_mod.test_fn"
+
+    def test_same_name_other_module_does_not_match(self, monkeypatch):
+        from pytest_stochastic.decorator import _tuned_variance_for
+
+        def fn():
+            return 0.0
+
+        # Two entries share fn's bare name but live in other modules: the
+        # bare-name fallback must refuse the ambiguous match.
+        self._with_tuned(
+            monkeypatch,
+            {
+                f"other.module_a.{fn.__qualname__}": {"variance": 0.5},
+                f"other.module_b.{fn.__qualname__}": {"variance": 0.7},
+            },
+        )
+        assert _tuned_variance_for(fn) is None
+
+    def test_unique_bare_name_fallback_matches(self, monkeypatch):
+        from pytest_stochastic.decorator import _tuned_variance_for
+
+        def fn():
+            return 0.0
+
+        self._with_tuned(monkeypatch, {f"other.module_a.{fn.__qualname__}": {"variance": 0.5}})
+        assert _tuned_variance_for(fn) == 0.5
+
+    def test_non_finite_variance_is_ignored(self, monkeypatch):
+        from pytest_stochastic.decorator import _tuned_variance_for
+
+        def fn():
+            return 0.0
+
+        key = f"{fn.__module__}.{fn.__qualname__}"
+        self._with_tuned(monkeypatch, {key: {"variance": float("inf")}})
+        assert _tuned_variance_for(fn) is None
+
+    def test_inf_tuned_variance_does_not_break_decoration(self, monkeypatch):
+        """A degenerate tune run (variance=inf) must not crash bound
+        selection with an OverflowError at import time."""
+        import pytest_stochastic.decorator as dec
+
+        def sampler(rng):
+            return rng.random()
+
+        key = f"{sampler.__module__}.{sampler.__qualname__}"
+        monkeypatch.setattr(dec, "_tuned_params_cache", {key: {"variance": float("inf")}})
+
+        decorated = stochastic_test(expected=0.5, atol=0.1, bounds=(0, 1), seed=1)(sampler)
+        assert decorated._stochastic_bound.name != "bernstein_tuned"
 
 
 class TestDistributionalTestReproducibility:

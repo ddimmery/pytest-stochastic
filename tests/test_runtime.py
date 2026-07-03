@@ -81,23 +81,59 @@ class TestCollectSamples:
             collect_samples(f, 1, np.random.default_rng(0))
 
 
+def _config(
+    expected: float = 0.0,
+    tol: float = 0.1,
+    failure_prob: float = 0.01,
+    side: str = "two-sided",
+    variance: float | None = 1.0,
+    moment_bound: tuple[float, float] | None = None,
+) -> TestConfig:
+    return TestConfig(
+        expected=expected,
+        tol=tol,
+        failure_prob=failure_prob,
+        side=side,
+        variance=variance,
+        moment_bound=moment_bound,
+    )
+
+
 class TestComputeEstimate:
     def test_sample_mean(self):
         samples = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-        result = compute_estimate(samples, EstimatorType.SAMPLE_MEAN, 0.01)
+        result = compute_estimate(samples, EstimatorType.SAMPLE_MEAN, _config())
         assert result == pytest.approx(3.0)
 
     def test_median_of_means(self):
         rng = np.random.default_rng(42)
         samples = rng.normal(0.0, 1.0, 10000)
-        result = compute_estimate(samples, EstimatorType.MEDIAN_OF_MEANS, 0.01)
+        result = compute_estimate(samples, EstimatorType.MEDIAN_OF_MEANS, _config())
         assert abs(result) < 0.1  # should be near 0
 
     def test_catoni_estimator(self):
         rng = np.random.default_rng(42)
         samples = rng.normal(5.0, 1.0, 1000)
-        result = compute_estimate(samples, EstimatorType.CATONI_M_ESTIMATOR, 0.01)
+        config = _config(expected=5.0, tol=0.2, moment_bound=(2.0, 1.0), variance=None)
+        result = compute_estimate(samples, EstimatorType.CATONI_M_ESTIMATOR, config)
         assert abs(result - 5.0) < 0.2  # should be near 5.0
+
+    def test_catoni_p_less_than_2_delegates_to_median_of_means(self):
+        rng = np.random.default_rng(42)
+        samples = rng.normal(1.0, 1.0, 5000)
+        config = _config(expected=1.0, moment_bound=(1.5, 2.0), variance=None)
+        catoni = compute_estimate(samples, EstimatorType.CATONI_M_ESTIMATOR, config)
+        mom = compute_estimate(samples, EstimatorType.MEDIAN_OF_MEANS, config)
+        assert catoni == mom
+
+    def test_median_of_means_k_matches_preallocation(self):
+        """Runtime block count must mirror bounds._mom_num_blocks per side."""
+        from pytest_stochastic.bounds import _mom_num_blocks
+        from pytest_stochastic.runtime import _mom_k
+
+        for delta in (0.01, 1e-6):
+            for side in ("two-sided", "greater", "less"):
+                assert _mom_k(delta, side) == _mom_num_blocks(delta, side)
 
 
 class TestCheckAssertion:
@@ -196,3 +232,40 @@ class TestMaurerPontil:
         )
         effective_n = check_maurer_pontil(samples, config, failure_prob=1e-6)
         assert effective_n is None
+
+    def test_vectorized_matches_naive_scan(self):
+        """The cumulative-sum implementation must agree with a naive
+        per-prefix reference computation."""
+        import math
+
+        rng = np.random.default_rng(7)
+        samples = rng.normal(0.5, 0.05, 300)
+        config = TestConfig(
+            expected=0.5, tol=0.08, failure_prob=1e-4, side="two-sided", bounds=(0.0, 1.0)
+        )
+
+        n = len(samples)
+        k_side = 2
+        log_term = math.log(2 * k_side * (n - 1) / config.failure_prob)
+        naive = None
+        for m in range(2, n + 1):
+            var = float(np.var(samples[:m], ddof=1))
+            threshold = math.sqrt(2 * var * log_term / m) + 7 * 1.0 * log_term / (3 * (m - 1))
+            if threshold <= config.tol:
+                naive = m if m < n else None
+                break
+
+        assert check_maurer_pontil(samples, config, config.failure_prob) == naive
+
+    def test_large_input_is_fast(self):
+        """The scan must be O(n): 1M samples in well under a second."""
+        import time
+
+        rng = np.random.default_rng(0)
+        samples = rng.random(1_000_000)
+        config = TestConfig(
+            expected=0.5, tol=0.01, failure_prob=1e-8, side="two-sided", bounds=(0.0, 1.0)
+        )
+        start = time.monotonic()
+        check_maurer_pontil(samples, config, config.failure_prob)
+        assert time.monotonic() - start < 1.0
