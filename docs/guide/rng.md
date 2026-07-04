@@ -59,7 +59,7 @@ This test will produce identical results on every run, on every machine (assumin
 When no fixed seed is specified and a test fails, the failure message includes the seed:
 
 ```
-FAILED [hoeffding, n=185, seed=7291038456123]:
+FAILED [hoeffding, n=3823, seed=7291038456123]:
   |0.567 - 0.5| = 0.067 not < 0.05
 ```
 
@@ -75,7 +75,7 @@ def test_custom_logic(stochastic_rng):
     assert abs(sum(samples) / len(samples)) < 1.0
 ```
 
-The fixture's seed is derived deterministically from the test's node ID (`hash(request.node.nodeid) % 2^32`), so it is reproducible across runs without specifying a seed.
+The fixture's seed is a stable digest of the test's node ID (the first four bytes of `sha256(nodeid)`), so it is reproducible across runs and across machines without specifying a seed. (Python's builtin `hash()` would not work here &mdash; it is salted per process.)
 
 ## Best Practices
 

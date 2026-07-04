@@ -22,8 +22,9 @@ class TestComputeVarianceUCB:
     def test_returns_finite(self):
         rng = np.random.default_rng(42)
         samples = rng.normal(0, 1, 10_000)
-        ucb = compute_variance_ucb(samples, confidence=1e-4)
+        ucb, method = compute_variance_ucb(samples, confidence=1e-4)
         assert math.isfinite(ucb)
+        assert method == "chi2_gaussian_approx"
 
     def test_upper_bound_on_true_variance(self):
         """UCB should be >= true variance with high probability."""
@@ -34,7 +35,7 @@ class TestComputeVarianceUCB:
         trials = 100
         for _i in range(trials):
             samples = rng.normal(0, math.sqrt(true_var), 1000)
-            ucb = compute_variance_ucb(samples, confidence=0.01)
+            ucb, _ = compute_variance_ucb(samples, confidence=0.01)
             if ucb >= true_var:
                 above += 1
         # With confidence=0.01, should be >= true_var at least 99% of the time
@@ -42,13 +43,41 @@ class TestComputeVarianceUCB:
 
     def test_single_sample_returns_inf(self):
         samples = np.array([1.0])
-        ucb = compute_variance_ucb(samples, confidence=1e-4)
+        ucb, _ = compute_variance_ucb(samples, confidence=1e-4)
         assert math.isinf(ucb)
 
     def test_constant_samples_near_zero(self):
         samples = np.full(100, 5.0)
-        ucb = compute_variance_ucb(samples, confidence=1e-4)
+        ucb, _ = compute_variance_ucb(samples, confidence=1e-4)
         assert ucb == pytest.approx(0.0, abs=1e-10)
+
+    def test_with_bounds_uses_maurer_pontil(self):
+        """With declared bounds the UCB is the distribution-free
+        Maurer-Pontil self-bounding interval."""
+        rng = np.random.default_rng(42)
+        samples = rng.random(10_000)  # uniform on [0, 1], var = 1/12
+        confidence = 1e-8
+        ucb, method = compute_variance_ucb(samples, confidence=confidence, bounds=(0.0, 1.0))
+        assert method == "maurer_pontil"
+        n = len(samples)
+        sample_var = float(np.var(samples, ddof=1))
+        slack = 1.0 * math.sqrt(2 * math.log(1 / confidence) / (n - 1))
+        assert ucb == pytest.approx((math.sqrt(sample_var) + slack) ** 2)
+        # It is a genuine upper bound on the true variance here
+        assert ucb > 1 / 12
+
+    def test_bounded_ucb_covers_true_variance(self):
+        """Distribution-free coverage on non-Gaussian (Bernoulli) data."""
+        rng = np.random.default_rng(0)
+        true_var = 0.25  # Bernoulli(1/2)
+        above = 0
+        trials = 100
+        for _ in range(trials):
+            samples = (rng.random(2000) < 0.5).astype(float)
+            ucb, _ = compute_variance_ucb(samples, confidence=0.01, bounds=(0.0, 1.0))
+            if ucb >= true_var:
+                above += 1
+        assert above == trials
 
 
 class TestRunTune:
@@ -136,6 +165,44 @@ class TestTomlPersistence:
     def test_load_nonexistent_returns_empty(self, tmp_path: Path):
         loaded = load_tuned_params(root=tmp_path)
         assert loaded == {}
+
+    def test_confidence_and_method_persisted(self, tmp_path: Path):
+        results = [
+            TuneResult(
+                test_key="tests.test_foo.test_bar",
+                variance=0.1,
+                observed_range=(0.0, 1.0),
+                n_tune_samples=1000,
+                tuned_at="2026-02-22T14:30:00+00:00",
+                confidence=1e-8,
+                method="maurer_pontil",
+            )
+        ]
+        save_tuned_params(results, root=tmp_path)
+        loaded = load_tuned_params(root=tmp_path)
+        params = loaded["tests.test_foo.test_bar"]
+        assert params["confidence"] == pytest.approx(1e-8)
+        assert params["method"] == "maurer_pontil"
+
+    def test_set_project_root(self, tmp_path: Path):
+        from pytest_stochastic.tune import set_project_root
+
+        results = [
+            TuneResult(
+                test_key="test_root",
+                variance=1.0,
+                observed_range=(0.0, 1.0),
+                n_tune_samples=100,
+                tuned_at="2026-01-01T00:00:00+00:00",
+            )
+        ]
+        set_project_root(tmp_path)
+        try:
+            save_tuned_params(results)
+            assert (tmp_path / ".stochastic.toml").exists()
+            assert "test_root" in load_tuned_params()
+        finally:
+            set_project_root(None)
 
     def test_update_existing_key(self, tmp_path: Path):
         results1 = [

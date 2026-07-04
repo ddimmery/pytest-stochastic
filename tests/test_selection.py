@@ -55,7 +55,12 @@ class TestSelectBound:
         assert bound.name == "median_of_means"
         assert n > 0
 
-    def test_anderson_selected_for_symmetric(self):
-        bound, _ = select_bound({"bounds": (0.0, 1.0), "symmetric": True}, 0.1, 0.01)
-        # Anderson should be selected for symmetric two-sided
+    def test_anderson_selected_for_symmetric_off_center(self):
+        bound, _ = select_bound({"bounds": (0.0, 1.0), "symmetric": True}, 0.1, 0.01, expected=0.2)
+        # Off-center expected shrinks the symmetric support, so anderson wins
         assert bound.name == "anderson"
+
+    def test_hoeffding_wins_tie_for_symmetric_centered(self):
+        bound, _ = select_bound({"bounds": (0.0, 1.0), "symmetric": True}, 0.1, 0.01, expected=0.5)
+        # Centered expected: anderson ties Hoeffding, first-registered wins
+        assert bound.name == "hoeffding"

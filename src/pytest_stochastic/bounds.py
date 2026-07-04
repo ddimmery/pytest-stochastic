@@ -11,7 +11,7 @@ import math
 
 from scipy import stats as sp_stats
 
-from .types import BoundStrategy, EstimatorType
+from .types import BoundStrategy, EstimatorType, InvalidPropertyError
 
 # ---------------------------------------------------------------------------
 # Helper: side support predicates
@@ -45,26 +45,60 @@ def _log_inv_delta(failure_prob: float, side: str) -> float:
 # ---------------------------------------------------------------------------
 
 
+def _mom_num_blocks(failure_prob: float, side: str) -> int:
+    """Number of median-of-means blocks: k = ceil(8 ln(k_side/delta)).
+
+    Each block fails (deviates by more than epsilon) with probability at most
+    1/4 by Chebyshev, so the median fails only if at least k/2 blocks fail;
+    by Hoeffding on the Bernoulli(1/4) failure indicators,
+    P(Bin(k, 1/4) >= k/2) <= exp(-2 k (1/4)^2) = exp(-k/8) <= delta.
+    (The two-sided union factor inside the log is conservative: both tail
+    events are contained in the single "half the blocks deviate" event.)
+    """
+    return math.ceil(8 * _log_inv_delta(failure_prob, side))
+
+
 def _median_of_means_n(tol: float, failure_prob: float, **props: object) -> int:
-    """k = ceil(8 ln(k_side/delta)), n = k * ceil(2 sigma^2 / epsilon^2)."""
+    """k = ceil(8 ln(k_side/delta)) blocks of size ceil(4 sigma^2 / epsilon^2).
+
+    Block size 4 sigma^2 / eps^2 makes the per-block Chebyshev failure
+    probability at most 1/4, which the median argument requires (block size
+    2 sigma^2 / eps^2 would give 1/2 and yield no guarantee at all).
+    """
     variance = float(props["variance"])  # type: ignore[arg-type]
     side = str(props.get("side", "two-sided"))
-    k = math.ceil(8 * _log_inv_delta(failure_prob, side))
-    block_size = math.ceil(2 * variance / tol**2)
+    k = _mom_num_blocks(failure_prob, side)
+    block_size = math.ceil(4 * variance / tol**2)
     return k * block_size
 
 
 def _catoni_n(tol: float, failure_prob: float, **props: object) -> int:
-    """n = ceil(C_p * (M / eps^p)^(2/(p+1)) * ln(k_side/delta)^(p/(p+1)))."""
+    """Sample size under a central-moment bound E|X - mu|^p <= M, p in (1, 2].
+
+    p = 2 (finite variance, M = sigma^2): Catoni's M-estimator (Catoni 2012,
+    Ann. IHP 48(4)) achieves |mu_hat - mu| <= eps with probability
+    >= 1 - delta once
+
+        n = ceil(2 ln(k_side/delta) (M/eps^2 + 1)).
+
+    The "+1" is the finite-n correction: the Chernoff argument evaluates
+    E(X - m)^2 = sigma^2 + eps^2 at the test points m = mu +/- eps.
+
+    1 < p < 2 (possibly infinite variance): median-of-means on blocks sized
+    via the von Bahr-Esseen inequality (1965), E|sum (X_i - mu)|^p <= 2 n M,
+    so a block of size B satisfies P(|block mean - mu| >= eps)
+    <= 2 M / (B^(p-1) eps^p) <= 1/4 once B = ceil((8 M / eps^p)^(1/(p-1)));
+    k = ceil(8 ln(k_side/delta)) blocks then give failure <= delta (cf.
+    Bubeck, Cesa-Bianchi & Lugosi 2013, "Bandits with heavy tail").
+    """
     p, m = props["moment_bound"]  # type: ignore[index]
     p = float(p)
     m = float(m)
     side = str(props.get("side", "two-sided"))
-    # C_p is a constant depending on p; use a standard choice
-    c_p = 2.0 * (p / (p - 1)) ** (2 * p / (p + 1))
-    return math.ceil(
-        c_p * (m / tol**p) ** (2 / (p + 1)) * _log_inv_delta(failure_prob, side) ** (p / (p + 1))
-    )
+    if p == 2.0:
+        return math.ceil(2 * _log_inv_delta(failure_prob, side) * (m / tol**2 + 1))
+    block_size = math.ceil((8 * m / tol**p) ** (1 / (p - 1)))
+    return _mom_num_blocks(failure_prob, side) * block_size
 
 
 def _hoeffding_n(tol: float, failure_prob: float, **props: object) -> int:
@@ -76,13 +110,29 @@ def _hoeffding_n(tol: float, failure_prob: float, **props: object) -> int:
 
 
 def _anderson_n(tol: float, failure_prob: float, **props: object) -> int:
-    """n = ceil((b - a)^2 * ln(1/delta) / (2 * epsilon^2)).
+    """Hoeffding on the reduced support of a symmetric distribution.
 
-    Factor-of-2 improvement over Hoeffding for symmetric distributions.
+    Under the null hypothesis the mean is *expected*.  A distribution
+    symmetric about its mean mu with support in [a, b] actually has
+    ess sup |X - mu| <= w := min(b - mu, mu - a): any mass at mu + d with
+    d > min(b - mu, mu - a) would require matching mass at mu - d outside
+    [a, b].  Hoeffding therefore applies with range 2w:
+
+        n = ceil((2w)^2 ln(2/delta) / (2 eps^2)) = ceil(2 w^2 ln(2/delta) / eps^2).
+
+    Strictly better than Hoeffding when *expected* is off-center in [a, b];
+    identical when centered.
     """
     a, b = props["bounds"]  # type: ignore[index]
     a, b = float(a), float(b)
-    return math.ceil((b - a) ** 2 * math.log(1 / failure_prob) / (2 * tol**2))
+    expected = float(props["expected"])  # type: ignore[arg-type]
+    w = min(b - expected, expected - a)
+    if w <= 0:
+        raise InvalidPropertyError(
+            "The symmetric (anderson) bound requires a < expected < b, got "
+            f"expected={expected} with bounds=({a}, {b})"
+        )
+    return math.ceil(2 * w**2 * math.log(2 / failure_prob) / tol**2)
 
 
 def _maurer_pontil_n(tol: float, failure_prob: float, **props: object) -> int:
@@ -97,46 +147,58 @@ def _maurer_pontil_n(tol: float, failure_prob: float, **props: object) -> int:
 
 
 def _bentkus_n(tol: float, failure_prob: float, **props: object) -> int:
-    """Numerically invert the Bentkus Binomial tail bound via bisection.
+    """Numerically invert the Bentkus binomial tail bound.
 
-    For one-sided tests the full budget goes to one tail.
-    For two-sided tests we split the budget (delta/2 per tail).
+    Bentkus (2004, Ann. Probab. 32(2), Thm 1.1): for independent summands
+    bounded in [a, b], P(S_n/n - mu >= tol) <= (e^2/2) P°(Bin(n, q) >= x)
+    where P° is the least log-concave majorant of the binomial tail and the
+    worst case over the unknown mean is q = 1/2.  Since P° interpolates the
+    discrete tail, P°(x) <= P(Bin >= floor(x)); we therefore evaluate the
+    tail at floor(n p*) to stay on the conservative side.
+
+    This bound is registered one-sided only, so the full failure budget goes
+    to the single tail being tested.
     """
     a, b = props["bounds"]  # type: ignore[index]
     a, b = float(a), float(b)
     range_width = b - a
 
-    # Bentkus constant
-    c_bentkus = math.e / math.sqrt(2 * math.pi)
-
-    # For one-sided: full delta; for two-sided: delta/2 per tail
-    # The caller decides; we receive the effective delta directly.
-    # However, we receive the full failure_prob always and handle sidedness
-    # via the supports_side predicate.  For one-sided bounds the full budget
-    # goes to one tail.
+    # Bentkus (2004) constant
+    c_bentkus = math.e**2 / 2
     delta = failure_prob
 
-    # Bisection: find smallest n such that the Bentkus bound holds.
-    lo, hi = 1, _hoeffding_n(tol, failure_prob, **props)
-    # Ensure hi is sufficient
-    hi = max(hi, 2)
-
     def _bentkus_holds(n: int) -> bool:
-        # P(|S_n/n - mu| >= tol) <= c * P(Bin(n, p_star) >= k_star)
+        # P(S_n/n - mu >= tol) <= c * P(Bin(n, 1/2) >= floor(n p*))
         p_star = tol / range_width + 0.5
         p_star = min(max(p_star, 0.0), 1.0)
-        k_star = math.ceil(n * p_star)
+        k_star = math.floor(n * p_star)
         if k_star > n:
             return True
-        binom_tail = 1.0 - sp_stats.binom.cdf(k_star - 1, n, 0.5)
+        binom_tail = float(sp_stats.binom.sf(k_star - 1, n, 0.5))
         return c_bentkus * binom_tail <= delta
 
+    # Establish a verified upper bracket by doubling (the Hoeffding n is not
+    # guaranteed to satisfy the predicate because of the e^2/2 constant).
+    hi = 2
+    while not _bentkus_holds(hi):
+        hi *= 2
+        if hi > 2**40:  # pragma: no cover - unreachable for valid inputs
+            raise OverflowError("Bentkus bound inversion failed to bracket")
+
+    # Bisect for the smallest n where the bound holds ...
+    lo = 1
     while lo < hi:
         mid = (lo + hi) // 2
         if _bentkus_holds(mid):
             hi = mid
         else:
             lo = mid + 1
+
+    # ... and guard against non-monotonicity of the discrete tail (parity
+    # effects of the ceiling): soundness only requires the bound to hold at
+    # the n actually used.
+    while not _bentkus_holds(lo):
+        lo += 1
     return lo
 
 
@@ -192,7 +254,7 @@ BOUND_REGISTRY: list[BoundStrategy] = [
         compute_n=_catoni_n,
         supports_side=_supports_any_side,
         estimator_type=EstimatorType.CATONI_M_ESTIMATOR,
-        description="Catoni M-estimator; handles heavy-tailed distributions (p > 1)",
+        description="Catoni M-estimator (p = 2) / median-of-means (p < 2) for heavy tails",
     ),
     BoundStrategy(
         name="hoeffding",
@@ -210,7 +272,8 @@ BOUND_REGISTRY: list[BoundStrategy] = [
         compute_n=_anderson_n,
         supports_side=_supports_two_sided_only,
         estimator_type=EstimatorType.SAMPLE_MEAN,
-        description="Anderson's inequality; 2x improvement for symmetric distributions",
+        description="Hoeffding on the reduced support of a symmetric distribution; "
+        "improves on Hoeffding when expected is off-center in [a, b]",
     ),
     BoundStrategy(
         name="maurer_pontil",
@@ -228,7 +291,7 @@ BOUND_REGISTRY: list[BoundStrategy] = [
         compute_n=_bentkus_n,
         supports_side=_supports_one_sided_only,
         estimator_type=EstimatorType.SAMPLE_MEAN,
-        description="Bentkus inequality; ~20-40% fewer samples for one-sided bounded tests",
+        description="Bentkus inequality; ~5-10% fewer samples for one-sided bounded tests",
     ),
     BoundStrategy(
         name="bernstein",

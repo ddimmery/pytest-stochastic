@@ -117,11 +117,13 @@ def test_slope_bounds_and_variance(rng):
     return _ols_slope(rng)
 ```
 
-$$n_{\text{Bernstein}} = \left\lceil \frac{2\sigma^2 \ln(2/\delta)}{\varepsilon^2} + \frac{2(b-a)\ln(2/\delta)}{3\varepsilon} \right\rceil = 918$$
+$$n_{\text{Bernstein}} = \left\lceil \frac{2\sigma^2 \ln(2/\delta)}{\varepsilon^2} + \frac{2(b-a)\ln(2/\delta)}{3\varepsilon} \right\rceil = 1{,}245$$
 
 Because the true variance ($\approx 0.029$) is much smaller than the worst-case
-variance implied by the range ($\approx 19.8$), Bernstein is **83&times;
-tighter** than Hoeffding.
+variance implied by the range ($\approx 19.8$), Bernstein is **61&times;
+tighter** than Hoeffding.  (Median-of-means is also applicable with just the
+variance, but needs $n = 1{,}836$ here &mdash; the framework evaluates both and
+picks the cheaper one.)
 
 ## Step 3 &mdash; Sub-Gaussian parameter (Sub-Gaussian)
 
@@ -144,7 +146,7 @@ def test_slope_sub_gaussian(rng):
 $$n_{\text{Sub-Gaussian}} = \left\lceil \frac{2\sigma_{\text{sg}}^2 \ln(2/\delta)}{\varepsilon^2} \right\rceil = 113$$
 
 The sub-Gaussian bound drops the second-order range term entirely, giving
-another **8&times; reduction** over Bernstein.
+another **11&times; reduction** over Bernstein.
 
 ## Running it
 
@@ -154,11 +156,11 @@ pytest examples/test_ols_slope.py -v
 
 ```{ .text .no-copy }
 examples/test_ols_slope.py::test_slope_bounds_only PASSED
-    [hoeffding, n=75886, observed=2.00043, maurer_pontil_effective_n=4701]
+    [hoeffding, n=75886, observed=1.99987, maurer_pontil_effective_n=7619]
 examples/test_ols_slope.py::test_slope_bounds_and_variance PASSED
-    [median_of_means, n=918, observed=1.99653]
+    [bernstein, n=1245, observed=1.99108]
 examples/test_ols_slope.py::test_slope_sub_gaussian PASSED
-    [sub_gaussian, n=113, observed=2.02819]
+    [sub_gaussian, n=113, observed=2.00103]
 ```
 
 All three tests verify the same property &mdash; that $\hat\beta_1$ concentrates
@@ -168,20 +170,21 @@ sub-Gaussian parameter.
 
 !!! tip "Maurer-Pontil: a free upgrade"
 
-    Notice the `maurer_pontil_effective_n=4701` on the first test.  The
+    Notice the `maurer_pontil_effective_n=7619` on the first test.  The
     framework always runs the full $n$ required by the selected bound, but when
     bounds are declared it checks the **Maurer-Pontil empirical Bernstein
-    bound** post-hoc.  Here it found that only 4,701 of the 75,886 samples
-    were actually needed &mdash; the remaining samples confirmed that the
-    estimator's empirical variance was small enough to tighten the bound at
-    no extra cost.
+    bound** post-hoc.  Here it found that roughly 7,600 of the 75,886 samples
+    would have sufficed &mdash; the estimator's empirical variance was small
+    enough to tighten the bound at no extra cost.  The number is informational
+    only (it never affects pass/fail), and it accounts for a union bound over
+    all the prefix lengths scanned.
 
 ## Summary
 
 | Declared Properties | Bound Selected | Repetitions ($n$) | Reduction |
 |---|---|--:|--:|
 | `bounds` | Hoeffding | 75,886 | &mdash; |
-| `bounds` + `variance` | Bernstein | 918 | 83&times; |
+| `bounds` + `variance` | Bernstein | 1,245 | 61&times; |
 | `sub_gaussian_param` | Sub-Gaussian | 113 | 672&times; |
 
 The pattern is general: **the more you know about your test statistic's

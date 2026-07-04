@@ -101,9 +101,17 @@ def validate_and_build_config(
             "(bounds, variance, sub_gaussian_param, or moment_bound)"
         )
 
-    # --- symmetric requires bounds ---
-    if symmetric and bounds is None:
-        raise InvalidPropertyError("symmetric=True requires bounds=(a, b) to be declared")
+    # --- symmetric requires bounds and an interior expected value ---
+    if symmetric:
+        if bounds is None:
+            raise InvalidPropertyError("symmetric=True requires bounds=(a, b) to be declared")
+        a, b = bounds
+        if not a < expected < b:
+            raise InvalidPropertyError(
+                "symmetric=True requires a < expected < b (a distribution symmetric "
+                f"about its mean cannot have its mean on the boundary), got "
+                f"expected={expected} with bounds=({a}, {b})"
+            )
 
     return TestConfig(
         expected=expected,

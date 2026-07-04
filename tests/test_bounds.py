@@ -23,11 +23,11 @@ from pytest_stochastic.bounds import (
 class TestMedianOfMeans:
     def test_known_value(self):
         # k = ceil(8 * ln(2/0.01)) = ceil(8 * 5.298) = 43
-        # block_size = ceil(2 * 1.0 / 0.1^2) = ceil(200) = 200
-        # n = 43 * 200 = 8600
+        # block_size = ceil(4 * 1.0 / 0.1^2) = 400 (per-block Chebyshev <= 1/4)
+        # n = 43 * 400 = 17200
         n = _median_of_means_n(0.1, 0.01, variance=1.0)
         k = math.ceil(8 * math.log(2 / 0.01))
-        block_size = math.ceil(2 * 1.0 / 0.1**2)
+        block_size = math.ceil(4 * 1.0 / 0.1**2)
         assert n == k * block_size
 
 
@@ -47,16 +47,31 @@ class TestHoeffding:
 
 
 class TestAnderson:
-    def test_improves_over_hoeffding(self):
-        # Anderson uses ln(1/delta) vs Hoeffding's ln(2/delta)
+    def test_ties_hoeffding_when_centered(self):
+        # Centered expected: reduced support 2*min(b-mu, mu-a) equals the
+        # full range, so anderson coincides with two-sided Hoeffding.
         n_hoef = _hoeffding_n(0.1, 0.01, bounds=(0.0, 1.0))
-        n_ander = _anderson_n(0.1, 0.01, bounds=(0.0, 1.0), symmetric=True)
+        n_ander = _anderson_n(0.1, 0.01, bounds=(0.0, 1.0), symmetric=True, expected=0.5)
+        assert n_ander == n_hoef
+
+    def test_improves_over_hoeffding_off_center(self):
+        # Off-center expected shrinks the effective support of a symmetric
+        # distribution, so fewer samples are needed than Hoeffding.
+        n_hoef = _hoeffding_n(0.1, 0.01, bounds=(0.0, 1.0))
+        n_ander = _anderson_n(0.1, 0.01, bounds=(0.0, 1.0), symmetric=True, expected=0.2)
         assert n_ander < n_hoef
 
     def test_known_value(self):
-        n = _anderson_n(0.1, 0.01, bounds=(0.0, 1.0), symmetric=True)
-        expected = math.ceil(1.0 * math.log(1 / 0.01) / (2 * 0.1**2))
-        assert n == expected
+        # w = min(1 - 0.2, 0.2 - 0) = 0.2, n = ceil(2 w^2 ln(2/delta) / eps^2)
+        n = _anderson_n(0.1, 0.01, bounds=(0.0, 1.0), symmetric=True, expected=0.2)
+        expected_n = math.ceil(2 * 0.2**2 * math.log(2 / 0.01) / 0.1**2)
+        assert n == expected_n
+
+    def test_boundary_expected_raises(self):
+        from pytest_stochastic.types import InvalidPropertyError
+
+        with pytest.raises(InvalidPropertyError):
+            _anderson_n(0.1, 0.01, bounds=(0.0, 1.0), symmetric=True, expected=0.0)
 
 
 class TestBernstein:
@@ -88,13 +103,30 @@ class TestSubGaussian:
 
 class TestBentkus:
     def test_improves_over_hoeffding_one_sided(self):
-        n_hoef = _hoeffding_n(0.1, 0.01, bounds=(0.0, 1.0))
-        n_bent = _bentkus_n(0.1, 0.01, bounds=(0.0, 1.0))
+        n_hoef = _hoeffding_n(0.1, 0.01, bounds=(0.0, 1.0), side="greater")
+        n_bent = _bentkus_n(0.1, 0.01, bounds=(0.0, 1.0), side="greater")
         assert n_bent <= n_hoef
 
     def test_returns_positive(self):
         n = _bentkus_n(0.1, 0.01, bounds=(0.0, 1.0))
         assert n >= 1
+
+    @pytest.mark.parametrize("delta", [1e-2, 1e-4, 1e-6, 1e-8])
+    def test_bound_holds_at_returned_n(self, delta):
+        """The Bentkus condition must hold at the n actually returned.
+
+        The exact worst case over distributions on [0, 1] with the mean at
+        the midpoint is Bernoulli(1/2); the failure probability at the
+        returned n is the exact binomial tail, which must be within budget.
+        """
+        from scipy import stats as sp_stats
+
+        tol = 0.1
+        n = _bentkus_n(tol, delta, bounds=(0.0, 1.0), side="greater")
+        k_star = math.floor(n * (tol + 0.5))
+        exact_failure = float(sp_stats.binom.sf(k_star - 1, n, 0.5))
+        c_bentkus = math.e**2 / 2
+        assert c_bentkus * exact_failure <= delta
 
 
 class TestMaurerPontil:
@@ -190,6 +222,33 @@ class TestCatoni:
         # Higher p (closer to 2) should generally give fewer samples
         # when the moment constant M is the same
         assert n2 <= n1
+
+    def test_known_value_p2(self):
+        """p = 2 uses Catoni's rate: n = ceil(2 ln(2/delta) (M/eps^2 + 1))."""
+        from pytest_stochastic.bounds import _catoni_n
+
+        tol, delta, m = 0.05, 0.01, 1.0
+        n = _catoni_n(tol, delta, moment_bound=(2.0, m))
+        assert n == math.ceil(2 * math.log(2 / delta) * (m / tol**2 + 1))
+
+    def test_known_value_p_less_than_2(self):
+        """1 < p < 2 uses median-of-means blocks sized via von Bahr-Esseen."""
+        from pytest_stochastic.bounds import _catoni_n
+
+        tol, delta, p, m = 0.5, 0.01, 1.5, 1.0
+        n = _catoni_n(tol, delta, moment_bound=(p, m))
+        block = math.ceil((8 * m / tol**p) ** (1 / (p - 1)))
+        k = math.ceil(8 * math.log(2 / delta))
+        assert n == k * block
+
+    def test_p2_scales_inverse_square_in_tolerance(self):
+        """Halving the tolerance must roughly quadruple n (the old formula
+        scaled as eps^(-4/3), which was unsound)."""
+        from pytest_stochastic.bounds import _catoni_n
+
+        n1 = _catoni_n(0.1, 0.01, moment_bound=(2.0, 1.0))
+        n2 = _catoni_n(0.05, 0.01, moment_bound=(2.0, 1.0))
+        assert n2 >= 3.9 * n1
 
 
 class TestEdgeCases:

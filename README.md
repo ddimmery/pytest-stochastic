@@ -37,8 +37,8 @@ the best available concentration inequality.
   using KS, chi-squared, or Anderson-Darling tests
 - **Automatic bound selection** — Declare properties (bounds, variance, sub-Gaussian
   parameter) and the framework picks the tightest inequality from a registry of
-  concentration bounds including Hoeffding, Bernstein, Bentkus, Anderson,
-  Maurer-Pontil, sub-Gaussian, median-of-means, and Catoni
+  nine concentration bounds: Hoeffding, Bernstein, tuned Bernstein, Bentkus,
+  Anderson (symmetric), Maurer-Pontil, sub-Gaussian, median-of-means, and Catoni
 - **Tune mode** — Run `pytest --stochastic-tune` to empirically profile tests and
   persist discovered variance to `.stochastic.toml` for tighter bounds on subsequent
   runs
@@ -79,28 +79,28 @@ Run it:
 
 ```
 $ pytest test_example.py -v
-test_example.py::test_uniform_mean PASSED [hoeffding, n=185, observed=0.498]
+test_example.py::test_uniform_mean PASSED [hoeffding, n=3823, observed=0.498]
 ```
 
 The framework determined that Hoeffding's inequality is the tightest applicable
-bound, computed the required sample size (n=185) for the default failure probability
-of 10⁻⁸, called the test function 185 times with a seeded RNG, and verified the
-sample mean falls within tolerance.
+bound, computed the required sample size (n=3823) for the default failure
+probability of 10⁻⁸, called the test function 3,823 times with a seeded RNG, and
+verified the sample mean falls within tolerance.
 
 ## Tighter Bounds with More Information
 
 The more you tell the framework about your distribution, the fewer samples it needs:
 
 ```python
-# Bounds only → Hoeffding (n ≈ 75,900)
+# Bounds only → Hoeffding (n = 75,886)
 @stochastic_test(expected=2.0, atol=0.1, bounds=(-2.46, 6.46))
 def test_slope_hoeffding(rng): ...
 
-# Bounds + variance → Bernstein (n ≈ 918, an 83x reduction)
+# Bounds + variance → Bernstein (n = 1,245, a 61x reduction)
 @stochastic_test(expected=2.0, atol=0.1, bounds=(-2.46, 6.46), variance=0.029)
 def test_slope_bernstein(rng): ...
 
-# Sub-Gaussian parameter → Sub-Gaussian (n ≈ 113, a further 8x reduction)
+# Sub-Gaussian parameter → Sub-Gaussian (n = 113, a further 11x reduction)
 @stochastic_test(expected=2.0, atol=0.1, sub_gaussian_param=0.172)
 def test_slope_subgaussian(rng): ...
 ```
@@ -140,9 +140,9 @@ pytest
 
 Tune mode collects 50,000 samples per test (configurable via
 `--stochastic-tune-samples`), computes an upper confidence bound on the variance
-using the chi-squared distribution, and persists the results. On subsequent runs,
-the decorator loads the tuned variance and uses Bernstein's inequality for tighter
-sample size requirements.
+(distribution-free when the test declares bounds), and persists the results. On
+subsequent runs, the decorator loads the tuned variance and uses Bernstein's
+inequality for tighter sample size requirements.
 
 ## Documentation
 

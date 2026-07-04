@@ -18,7 +18,7 @@ pytest-stochastic solves this by letting you specify a **failure probability** (
 
 - **`@stochastic_test`** &mdash; Test that a statistic's mean matches an expected value within tolerance, with a mathematically guaranteed flakiness bound
 - **`@distributional_test`** &mdash; Test that outputs follow a reference distribution using KS, chi-squared, or Anderson-Darling tests
-- **Automatic bound selection** &mdash; Declares properties (bounds, variance, sub-Gaussian parameter) and the framework picks the tightest inequality from a registry of 10 bounds
+- **Automatic bound selection** &mdash; Declare properties (bounds, variance, sub-Gaussian parameter) and the framework picks the tightest inequality from a registry of nine bounds
 - **Tune mode** &mdash; Run `--stochastic-tune` to empirically profile tests and persist discovered variance to `.stochastic.toml` for tighter bounds on subsequent runs
 - **RNG injection** &mdash; Reproducible tests via automatic seed management and optional `rng` parameter injection
 
@@ -38,7 +38,7 @@ def test_uniform_mean(rng):
     return rng.uniform(0, 1)
 ```
 
-The framework determines that Hoeffding's inequality applies, computes $n = 4{,}606$ samples, runs the test, and guarantees a false failure rate below $10^{-8}$.
+The framework determines that Hoeffding's inequality applies, computes $n = 95{,}570$ samples, runs the test, and guarantees a false failure rate below $10^{-8}$. (A tolerance this tight is expensive with bounds alone &mdash; declaring the variance or running [tune mode](guide/tune-mode.md) reduces the sample count substantially.)
 
 ## Installation
 

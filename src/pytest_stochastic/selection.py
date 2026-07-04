@@ -15,6 +15,7 @@ def select_bound(
     tolerance: float,
     failure_prob: float,
     side: str = "two-sided",
+    expected: float = 0.0,
 ) -> tuple[BoundStrategy, int]:
     """Select the tightest applicable bound and return it with the required *n*.
 
@@ -41,7 +42,9 @@ def select_bound(
     best_n = float("inf")
 
     for bound in candidates:
-        n = bound.compute_n(tolerance, failure_prob, side=side, **declared_properties)
+        n = bound.compute_n(
+            tolerance, failure_prob, side=side, expected=expected, **declared_properties
+        )
         if n < best_n:
             best_n = n
             best_bound = bound

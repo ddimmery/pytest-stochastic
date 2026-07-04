@@ -46,15 +46,15 @@ pytest test_example.py -v
 ```
 
 ```
-test_example.py::test_uniform_mean PASSED [hoeffding, n=185, observed=0.498]
+test_example.py::test_uniform_mean PASSED [hoeffding, n=3823, observed=0.498]
 ```
 
 ### What Happened
 
 1. The `@stochastic_test` decorator validated your parameters at import time
 2. The framework determined that Hoeffding's inequality is the tightest applicable bound for a bounded random variable with no declared variance
-3. It computed the required sample size ($n = 185$) for the default failure probability of $10^{-8}$
-4. It called `test_uniform_mean` 185 times, injecting a seeded RNG each time
+3. It computed the required sample size ($n = 3{,}823$) for the default failure probability of $10^{-8}$
+4. It called `test_uniform_mean` 3,823 times, injecting a seeded RNG each time
 5. It computed the sample mean and checked whether it falls within 0.05 of the expected value 0.5
 
 ## Understanding the Parameters

@@ -71,7 +71,7 @@ The statistical test to use:
 
 **Chi-squared test** bins samples using quantiles of the reference distribution ($\sqrt{n}$ bins, minimum 10), then compares observed vs. expected counts. Useful when the CDF is expensive to evaluate pointwise.
 
-**Anderson test** uses `scipy.stats.anderson_ksamp` to compare your samples against an equal-sized sample from the reference distribution. It has better sensitivity in the distribution tails than KS.
+**Anderson test** uses `scipy.stats.anderson_ksamp` to compare your samples against an equal-sized sample from the reference distribution. It has better sensitivity in the distribution tails than KS. Note that scipy caps its p-values to $[0.001, 0.25]$, so `significance` must lie in $[0.001, 0.25)$ for this test.
 
 ### `significance` (float, default: 1e-6)
 
@@ -84,6 +84,14 @@ The significance level $\alpha$. The test asserts $\text{p-value} > \alpha$. Low
 # Relaxed
 @distributional_test(reference=stats.norm(0, 1), significance=0.01)
 ```
+
+!!! warning "`test=\"anderson\"` requires `0.001 <= significance < 0.25`"
+
+    scipy's `anderson_ksamp` only reports p-values within $[0.001, 0.25]$.
+    Below that floor the test could never fail, so the decorator rejects
+    such configurations with a `ConfigurationError` at import time. Use
+    `test="ks"`, which has exact p-values, when you need a smaller
+    significance level.
 
 ### `n_samples` (int, default: 10_000)
 
